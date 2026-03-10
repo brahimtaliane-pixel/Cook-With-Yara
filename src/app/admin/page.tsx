@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { articles, keywords, pipelineRuns } from "@/lib/db/schema";
 import { eq, count, desc } from "drizzle-orm";
@@ -44,11 +45,11 @@ export default async function AdminOverviewPage() {
   ]);
 
   const stats = [
-    { label: "Total Articles", value: totalArticlesRow?.value ?? 0 },
-    { label: "Published", value: publishedRow?.value ?? 0 },
-    { label: "Failed Articles", value: failedArticlesRow?.value ?? 0 },
-    { label: "Total Keywords", value: totalKeywordsRow?.value ?? 0 },
-    { label: "Approved Keywords", value: approvedKeywordsRow?.value ?? 0 },
+    { label: "Total Articles", value: totalArticlesRow?.value ?? 0, href: "/admin/articles" },
+    { label: "Published", value: publishedRow?.value ?? 0, href: "/admin/articles?status=published" },
+    { label: "Failed Articles", value: failedArticlesRow?.value ?? 0, href: "/admin/articles?status=failed" },
+    { label: "Total Keywords", value: totalKeywordsRow?.value ?? 0, href: "/admin/keywords" },
+    { label: "Approved Keywords", value: approvedKeywordsRow?.value ?? 0, href: "/admin/keywords" },
   ];
 
   return (
@@ -57,12 +58,14 @@ export default async function AdminOverviewPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         {stats.map((s) => (
-          <Card key={s.label} size="sm">
-            <CardHeader>
-              <CardDescription>{s.label}</CardDescription>
-              <CardTitle className="text-2xl">{s.value}</CardTitle>
-            </CardHeader>
-          </Card>
+          <Link key={s.label} href={s.href}>
+            <Card size="sm" className="transition-colors hover:bg-muted/50">
+              <CardHeader>
+                <CardDescription>{s.label}</CardDescription>
+                <CardTitle className="text-2xl">{s.value}</CardTitle>
+              </CardHeader>
+            </Card>
+          </Link>
         ))}
       </div>
 

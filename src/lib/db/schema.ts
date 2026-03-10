@@ -37,6 +37,7 @@ export const articles = pgTable("articles", {
   midjourneyTaskId: text("midjourney_task_id"),
   midjourneyPrompt: text("midjourney_prompt"),
   pinImageUrl: text("pin_image_url"),
+  pinImageUrl2: text("pin_image_url_2"),
   canvaDesignId: text("canva_design_id"),
   pinterestPinId: text("pinterest_pin_id"),
   publishedUrl: text("published_url"),

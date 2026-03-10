@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { articles } from "@/lib/db/schema";
 import { ArticleStatus } from "@/lib/constants";
-import { generatePinImage } from "@/lib/services/canva";
+import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
 import { shouldRetry } from "@/lib/pipeline/base";
 import { put } from "@vercel/blob";
 import { eq, and, sql } from "drizzle-orm";
@@ -34,23 +34,28 @@ export async function createPinImage(): Promise<{ processed: number }> {
       throw new Error("No hero image URL found");
     }
 
-    // Generate pin image using Satori
-    const pngBuffer = await generatePinImage({
+    const pinParams = {
       title: article.title || "Delicious Recipe",
       heroImageUrl: article.heroImageUrl,
-    });
+    };
 
-    // Upload to Vercel Blob
-    const { url } = await put(
-      `recipes/${article.slug}/pin.png`,
-      pngBuffer,
-      { access: "public" }
-    );
+    // Generate both pin designs in parallel
+    const [pngBuffer1, pngBuffer2] = await Promise.all([
+      generatePinImage(pinParams),
+      generatePinImageSimple(pinParams),
+    ]);
+
+    // Upload both to Vercel Blob in parallel
+    const [blob1, blob2] = await Promise.all([
+      put(`recipes/${article.slug}/pin.png`, pngBuffer1, { access: "public" }),
+      put(`recipes/${article.slug}/pin2.png`, pngBuffer2, { access: "public" }),
+    ]);
 
     await db
       .update(articles)
       .set({
-        pinImageUrl: url,
+        pinImageUrl: blob1.url,
+        pinImageUrl2: blob2.url,
         status: ArticleStatus.PIN_READY,
         updatedAt: new Date(),
       })
