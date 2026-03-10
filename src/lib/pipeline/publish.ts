@@ -37,24 +37,32 @@ export async function publishAndPin(): Promise<{ processed: number }> {
       process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
     await fetch(`${siteUrl}/api/revalidate?slug=${article.slug}&secret=${process.env.CRON_SECRET}`);
 
-    // Post pin to Pinterest
+    // Try Pinterest — but don't block publishing if it fails
+    let pinterestPinId: string | null = null;
     const boardId = process.env.PINTEREST_BOARD_ID;
-    if (!boardId) {
-      throw new Error("PINTEREST_BOARD_ID not configured");
-    }
 
-    const pin = await createPin({
-      boardId,
-      title: article.title || "Delicious Recipe",
-      description: article.metaDescription || "",
-      imageUrl: article.pinImageUrl || article.heroImageUrl || "",
-      link: canonicalUrl,
-    });
+    if (boardId) {
+      try {
+        const pin = await createPin({
+          boardId,
+          title: article.title || "Delicious Recipe",
+          description: article.metaDescription || "",
+          imageUrl: article.pinImageUrl || article.heroImageUrl || "",
+          link: canonicalUrl,
+        });
+        pinterestPinId = pin.id;
+      } catch (pinError) {
+        console.warn(
+          `Pinterest pin creation failed for ${article.slug}, publishing without pin:`,
+          pinError instanceof Error ? pinError.message : pinError
+        );
+      }
+    }
 
     await db
       .update(articles)
       .set({
-        pinterestPinId: pin.id,
+        pinterestPinId,
         publishedUrl: canonicalUrl,
         publishedAt: new Date(),
         status: ArticleStatus.PUBLISHED,

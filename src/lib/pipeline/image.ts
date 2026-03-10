@@ -34,7 +34,14 @@ export async function submitImage(): Promise<{ processed: number }> {
       throw new Error("No Midjourney prompt found");
     }
 
-    const taskId = await submitImagineJob(article.midjourneyPrompt);
+    // Sanitize prompt: replace words blocked by ImaginePro's content filter
+    const sanitizedPrompt = article.midjourneyPrompt
+      .replace(/\bbreast(s)?\b/gi, "fillet$1")
+      .replace(/\bthigh(s)?\b/gi, "piece$1")
+      .replace(/\bnaked\b/gi, "plain")
+      .replace(/\bbare\b/gi, "simple");
+
+    const taskId = await submitImagineJob(sanitizedPrompt);
 
     await db
       .update(articles)
