@@ -41,7 +41,13 @@ async function callClaude(systemMessage: string, userMessage: string): Promise<s
   if (block.type !== "text") {
     throw new Error("Unexpected response type from Claude");
   }
-  return block.text;
+
+  // Strip markdown code fences — Claude sometimes wraps JSON in ```json ... ```
+  let text = block.text.trim();
+  if (text.startsWith("```")) {
+    text = text.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+  }
+  return text;
 }
 
 // === Public API ===
