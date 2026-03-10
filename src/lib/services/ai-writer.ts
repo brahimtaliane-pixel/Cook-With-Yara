@@ -45,9 +45,9 @@ async function callClaude(systemMessage: string, userMessage: string): Promise<s
   // Strip markdown code fences — Claude sometimes wraps JSON in ```json ... ```
   let text = block.text.trim();
   if (text.startsWith("```")) {
-    text = text.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+    text = text.replace(/^```(?:\w+)?\s*/, "").replace(/\s*```\s*$/, "");
   }
-  return text;
+  return text.trim();
 }
 
 // === Public API ===
