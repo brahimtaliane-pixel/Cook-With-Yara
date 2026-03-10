@@ -8,7 +8,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import satori from "satori";
-import { Resvg } from "@resvg/resvg-js";
+import sharp from "sharp";
 import { readFile, writeFile } from "fs/promises";
 import { join } from "path";
 
@@ -175,10 +175,7 @@ async function main() {
   });
 
   console.log("Converting SVG to PNG...");
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: "width", value: 1000 },
-  });
-  const pngBuffer = resvg.render().asPng();
+  const pngBuffer = await sharp(Buffer.from(svg)).png().toBuffer();
 
   const outputPath = join(process.cwd(), "test-pin.png");
   await writeFile(outputPath, pngBuffer);
