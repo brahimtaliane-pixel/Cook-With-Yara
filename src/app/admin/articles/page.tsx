@@ -15,6 +15,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArticleRowActions } from "./article-row-actions";
 import { StatusFilter } from "./status-filter";
+import { GenerateAllPinsButton } from "./generate-all-pins-button";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,10 @@ export default async function ArticlesPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold tracking-tight">Articles</h1>
-        <StatusFilter currentStatus={filterStatus} />
+        <div className="flex items-center gap-2">
+          <GenerateAllPinsButton />
+          <StatusFilter currentStatus={filterStatus} />
+        </div>
       </div>
       <Table>
         <TableHeader>

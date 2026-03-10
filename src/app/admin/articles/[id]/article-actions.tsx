@@ -13,7 +13,7 @@ import {
   DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
-import { RefreshCw, ExternalLink, Trash2 } from "lucide-react";
+import { RefreshCw, ExternalLink, Trash2, ImageIcon } from "lucide-react";
 
 interface ArticleActionsProps {
   article: {
@@ -21,6 +21,8 @@ interface ArticleActionsProps {
     status: string;
     publishedUrl: string | null;
     slug: string;
+    heroImageUrl: string | null;
+    pinImageUrl: string | null;
   };
 }
 
@@ -28,6 +30,24 @@ export function ArticleActions({ article }: ArticleActionsProps) {
   const router = useRouter();
   const [retrying, setRetrying] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [generatingPins, setGeneratingPins] = useState(false);
+
+  async function handleGeneratePins() {
+    setGeneratingPins(true);
+    try {
+      const res = await fetch(`/api/admin/articles/${article.id}/generate-pins`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        router.refresh();
+      } else {
+        const data = await res.json();
+        alert(data.error || "Failed to generate pins");
+      }
+    } finally {
+      setGeneratingPins(false);
+    }
+  }
 
   async function handleRetry() {
     setRetrying(true);
@@ -61,6 +81,18 @@ export function ArticleActions({ article }: ArticleActionsProps) {
 
   return (
     <div className="flex shrink-0 items-center gap-2">
+      {article.heroImageUrl && !article.pinImageUrl && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleGeneratePins}
+          disabled={generatingPins}
+        >
+          <ImageIcon className="size-3.5" data-icon="inline-start" />
+          {generatingPins ? "Generating..." : "Generate Pins"}
+        </Button>
+      )}
+
       {article.status === "failed" && (
         <Button
           variant="outline"

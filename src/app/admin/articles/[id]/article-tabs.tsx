@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, Download, ExternalLink } from "lucide-react";
 
 interface ArticleTabsProps {
   article: {
@@ -247,6 +247,107 @@ export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
 
       {/* Pinterest Tab */}
       <TabsContent value="pinterest" className="space-y-4 pt-4">
+        {/* Manual posting card — shown when no Pinterest pin ID yet */}
+        {!article.pinterestPinId && (article.pinImageUrl || article.pinImageUrl2) && (
+          <Card className="border-primary/20 bg-primary/[0.02]">
+            <CardHeader>
+              <CardTitle className="text-sm">Manual Pin Posting</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Pinterest app not approved yet? Download the images and post manually.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Step 1: Copy pin text */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  1. Copy pin details
+                </p>
+                <div className="rounded-md border bg-background p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Title</p>
+                      <p className="text-sm font-medium">{article.title}</p>
+                    </div>
+                    {article.title && <CopyButton text={article.title} />}
+                  </div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">Description</p>
+                      <p className="text-sm">{article.metaDescription}</p>
+                    </div>
+                    {article.metaDescription && (
+                      <CopyButton text={article.metaDescription} />
+                    )}
+                  </div>
+                  {article.publishedUrl && (
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs text-muted-foreground">
+                          Destination link
+                        </p>
+                        <p className="text-sm truncate">{article.publishedUrl}</p>
+                      </div>
+                      <CopyButton text={article.publishedUrl} />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 2: Download images */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  2. Download pin image
+                </p>
+                <div className="flex gap-3">
+                  {article.pinImageUrl && (
+                    <a
+                      href={article.pinImageUrl}
+                      download={`${article.slug}-pin1.png`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm">
+                        <Download className="size-3.5" data-icon="inline-start" />
+                        Design 1
+                      </Button>
+                    </a>
+                  )}
+                  {article.pinImageUrl2 && (
+                    <a
+                      href={article.pinImageUrl2}
+                      download={`${article.slug}-pin2.png`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Button variant="outline" size="sm">
+                        <Download className="size-3.5" data-icon="inline-start" />
+                        Design 2
+                      </Button>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 3: Go to Pinterest */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  3. Create pin on Pinterest
+                </p>
+                <a
+                  href="https://www.pinterest.com/pin-creation-tool/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button variant="default" size="sm">
+                    <ExternalLink className="size-3.5" data-icon="inline-start" />
+                    Open Pinterest Pin Creator
+                  </Button>
+                </a>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">Pinterest Details</CardTitle>
@@ -275,7 +376,13 @@ export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
               />
               <InfoRow
                 label="Pinterest Pin ID"
-                value={article.pinterestPinId}
+                value={
+                  article.pinterestPinId || (
+                    <span className="text-muted-foreground italic">
+                      Not posted yet
+                    </span>
+                  )
+                }
               />
             </div>
           </CardContent>
