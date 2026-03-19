@@ -1,3 +1,8 @@
+import { db } from "@/lib/db";
+import { pipelineConfig } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { ConfigKeys } from "@/lib/constants";
+
 const PINTEREST_API_BASE = "https://api.pinterest.com/v5";
 
 // === Types ===
@@ -30,22 +35,149 @@ export interface PinterestPin {
   media_source: Record<string, unknown>;
 }
 
-// === Helpers ===
-
-function getAccessToken(): string {
-  const token = process.env.PINTEREST_ACCESS_TOKEN;
-  if (!token) throw new Error("PINTEREST_ACCESS_TOKEN is not set");
-  return token;
+export interface PinterestBoard {
+  id: string;
+  name: string;
+  description: string;
+  privacy: string;
 }
+
+export interface PinterestUserAccount {
+  username: string;
+  profile_image: string;
+  website_url: string;
+}
+
+// === Token Management ===
+
+async function getConfigValue(key: string): Promise<string | null> {
+  const rows = await db
+    .select()
+    .from(pipelineConfig)
+    .where(eq(pipelineConfig.key, key))
+    .limit(1);
+  return rows[0]?.value ?? null;
+}
+
+async function setConfigValue(key: string, value: string): Promise<void> {
+  const existing = await db
+    .select()
+    .from(pipelineConfig)
+    .where(eq(pipelineConfig.key, key))
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db
+      .update(pipelineConfig)
+      .set({ value, updatedAt: new Date() })
+      .where(eq(pipelineConfig.key, key));
+  } else {
+    await db.insert(pipelineConfig).values({ key, value });
+  }
+}
+
+export async function refreshAccessToken(): Promise<string> {
+  const refreshToken = await getConfigValue(ConfigKeys.PINTEREST_REFRESH_TOKEN);
+  if (!refreshToken) {
+    throw new Error("No Pinterest refresh token available");
+  }
+
+  const appId = process.env.PINTEREST_APP_ID;
+  const appSecret = process.env.PINTEREST_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error("PINTEREST_APP_ID and PINTEREST_APP_SECRET must be set");
+  }
+
+  const res = await fetch(`${PINTEREST_API_BASE}/oauth/token`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${appId}:${appSecret}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Pinterest token refresh failed (${res.status}): ${body}`);
+  }
+
+  const data = (await res.json()) as {
+    access_token: string;
+    refresh_token?: string;
+    expires_in: number;
+  };
+
+  const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+
+  await setConfigValue(ConfigKeys.PINTEREST_ACCESS_TOKEN, data.access_token);
+  await setConfigValue(ConfigKeys.PINTEREST_TOKEN_EXPIRES_AT, expiresAt);
+  if (data.refresh_token) {
+    await setConfigValue(ConfigKeys.PINTEREST_REFRESH_TOKEN, data.refresh_token);
+  }
+
+  return data.access_token;
+}
+
+export async function getAccessToken(): Promise<string> {
+  // 1. Check pipelineConfig for OAuth token
+  const oauthToken = await getConfigValue(ConfigKeys.PINTEREST_ACCESS_TOKEN);
+  if (oauthToken) {
+    // Check expiry
+    const expiresAt = await getConfigValue(ConfigKeys.PINTEREST_TOKEN_EXPIRES_AT);
+    if (expiresAt) {
+      const expiresDate = new Date(expiresAt);
+      // Refresh if expires within 5 minutes
+      if (expiresDate.getTime() - Date.now() < 5 * 60 * 1000) {
+        try {
+          return await refreshAccessToken();
+        } catch {
+          // If refresh fails but token isn't actually expired yet, use it
+          if (expiresDate.getTime() > Date.now()) {
+            return oauthToken;
+          }
+          // Otherwise fall through to env var
+        }
+      } else {
+        return oauthToken;
+      }
+    } else {
+      // No expiry info, use the token as-is
+      return oauthToken;
+    }
+  }
+
+  // 2. Fall back to env var
+  const envToken = process.env.PINTEREST_ACCESS_TOKEN;
+  if (!envToken) throw new Error("No Pinterest access token available");
+  return envToken;
+}
+
+export async function getPinterestBoardId(): Promise<string> {
+  // Check pipelineConfig first
+  const configBoardId = await getConfigValue(ConfigKeys.PINTEREST_BOARD_ID);
+  if (configBoardId) return configBoardId;
+
+  // Fall back to env var
+  const envBoardId = process.env.PINTEREST_BOARD_ID;
+  if (!envBoardId) throw new Error("No Pinterest board ID configured");
+  return envBoardId;
+}
+
+// === API Helpers ===
 
 async function pinterestFetch<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  const token = await getAccessToken();
   const res = await fetch(`${PINTEREST_API_BASE}${path}`, {
     ...options,
     headers: {
-      Authorization: `Bearer ${getAccessToken()}`,
+      Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       ...options.headers,
     },
@@ -87,4 +219,13 @@ export async function createPin(params: CreatePinParams): Promise<PinterestPin> 
       },
     }),
   });
+}
+
+export async function fetchUserAccount(): Promise<PinterestUserAccount> {
+  return pinterestFetch<PinterestUserAccount>("/user_account");
+}
+
+export async function fetchBoards(): Promise<PinterestBoard[]> {
+  const data = await pinterestFetch<{ items: PinterestBoard[] }>("/boards");
+  return data.items;
 }

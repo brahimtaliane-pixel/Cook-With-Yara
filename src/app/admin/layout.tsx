@@ -5,6 +5,7 @@ import {
   FileText,
   Workflow,
   Settings,
+  Telescope,
 } from "lucide-react";
 
 const navItems = [
@@ -12,6 +13,7 @@ const navItems = [
   { href: "/admin/keywords", label: "Keywords", icon: KeyRound },
   { href: "/admin/articles", label: "Articles", icon: FileText },
   { href: "/admin/pipeline", label: "Pipeline", icon: Workflow },
+  { href: "/admin/intel", label: "Intel", icon: Telescope },
   { href: "/admin/config", label: "Config", icon: Settings },
 ];
 

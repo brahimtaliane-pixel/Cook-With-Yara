@@ -11,7 +11,7 @@ const categories = [
 
 export default function NotFound() {
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 py-20 text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-20 text-center">
       <p className="font-display text-8xl font-bold text-primary/20">404</p>
       <h1 className="mt-4 font-display text-3xl font-bold text-foreground sm:text-4xl">
         Page not found

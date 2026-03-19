@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, Download, ExternalLink } from "lucide-react";
+import { Copy, Check, Download, ExternalLink, Loader2 } from "lucide-react";
 
 interface ArticleTabsProps {
   article: {
@@ -124,6 +124,49 @@ function ImageCard({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function PostToPinterestButton({ articleId }: { articleId: string }) {
+  const [posting, setPosting] = useState(false);
+  const [result, setResult] = useState<{ success?: boolean; error?: string; pinId?: string } | null>(null);
+
+  async function handlePost() {
+    setPosting(true);
+    setResult(null);
+    try {
+      const res = await fetch(`/api/admin/articles/${articleId}/post-pin`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResult({ success: true, pinId: data.pinId });
+        // Reload after short delay to show updated pin ID
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setResult({ error: data.error || "Failed to post pin" });
+      }
+    } catch {
+      setResult({ error: "Network error" });
+    }
+    setPosting(false);
+  }
+
+  return (
+    <div className="space-y-2">
+      <Button onClick={handlePost} disabled={posting}>
+        {posting && <Loader2 className="size-3.5 animate-spin" data-icon="inline-start" />}
+        {posting ? "Posting..." : "Post to Pinterest"}
+      </Button>
+      {result?.success && (
+        <p className="text-sm text-green-600">
+          Pin posted! ID: {result.pinId}
+        </p>
+      )}
+      {result?.error && (
+        <p className="text-sm text-destructive">{result.error}</p>
+      )}
+    </div>
   );
 }
 
@@ -247,6 +290,21 @@ export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
 
       {/* Pinterest Tab */}
       <TabsContent value="pinterest" className="space-y-4 pt-4">
+        {/* Post to Pinterest via API */}
+        {!article.pinterestPinId && (article.pinImageUrl || article.pinImageUrl2) && (
+          <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20">
+            <CardHeader>
+              <CardTitle className="text-sm">Post to Pinterest</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Publish this pin directly via the Pinterest API using your connected account.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <PostToPinterestButton articleId={article.id} />
+            </CardContent>
+          </Card>
+        )}
+
         {/* Manual posting card — shown when no Pinterest pin ID yet */}
         {!article.pinterestPinId && (article.pinImageUrl || article.pinImageUrl2) && (
           <Card className="border-primary/20 bg-primary/[0.02]">

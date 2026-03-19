@@ -3,6 +3,7 @@ import {
   uuid,
   text,
   integer,
+  boolean,
   timestamp,
   jsonb,
 } from "drizzle-orm/pg-core";
@@ -62,6 +63,62 @@ export const pipelineConfig = pgTable("pipeline_config", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// === Intel Tables ===
+
+export const intelCompetitors = pgTable("intel_competitors", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  username: text("username").unique().notNull(),
+  displayName: text("display_name").notNull(),
+  profileImageUrl: text("profile_image_url"),
+  isActive: boolean("is_active").default(true).notNull(),
+  lastFetchedAt: timestamp("last_fetched_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const intelPins = pgTable("intel_pins", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pinId: text("pin_id").unique().notNull(),
+  competitorId: uuid("competitor_id").references(() => intelCompetitors.id, {
+    onDelete: "cascade",
+  }),
+  title: text("title").notNull(),
+  description: text("description").default("").notNull(),
+  imageUrl: text("image_url").notNull(),
+  linkUrl: text("link_url").default("").notNull(),
+  domain: text("domain").default("").notNull(),
+  saves: integer("saves").default(0).notNull(),
+  repins: integer("repins").default(0).notNull(),
+  velocity: integer("velocity").default(0).notNull(),
+  creatorName: text("creator_name").default("").notNull(),
+  creatorFollowers: integer("creator_followers").default(0).notNull(),
+  boardName: text("board_name").default("").notNull(),
+  pinCreatedAt: timestamp("pin_created_at"),
+  source: text("source").default("rss").notNull(),
+  sentToPipeline: boolean("sent_to_pipeline").default(false).notNull(),
+  pipelineKeywordId: uuid("pipeline_keyword_id").references(() => keywords.id),
+  instantVelocity: integer("instant_velocity").default(0).notNull(),
+  acceleration: integer("acceleration").default(0).notNull(),
+  baselineMultiple: integer("baseline_multiple").default(0).notNull(),
+  trendDirection: text("trend_direction").default("new").notNull(),
+  previousSaves: integer("previous_saves").default(0).notNull(),
+  previousSnapshotAt: timestamp("previous_snapshot_at"),
+  lastEnrichedAt: timestamp("last_enriched_at"),
+  discoveredAt: timestamp("discovered_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const intelPinSnapshots = pgTable("intel_pin_snapshots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pinId: text("pin_id")
+    .references(() => intelPins.pinId, { onDelete: "cascade" })
+    .notNull(),
+  saves: integer("saves").notNull(),
+  repins: integer("repins").default(0).notNull(),
+  velocity: integer("velocity").default(0).notNull(),
+  snapshotAt: timestamp("snapshot_at").defaultNow().notNull(),
+});
+
 // Type exports
 export type Keyword = typeof keywords.$inferSelect;
 export type NewKeyword = typeof keywords.$inferInsert;
@@ -69,3 +126,9 @@ export type Article = typeof articles.$inferSelect;
 export type NewArticle = typeof articles.$inferInsert;
 export type PipelineRun = typeof pipelineRuns.$inferSelect;
 export type PipelineConfig = typeof pipelineConfig.$inferSelect;
+export type IntelCompetitor = typeof intelCompetitors.$inferSelect;
+export type NewIntelCompetitor = typeof intelCompetitors.$inferInsert;
+export type IntelPin = typeof intelPins.$inferSelect;
+export type NewIntelPin = typeof intelPins.$inferInsert;
+export type IntelPinSnapshot = typeof intelPinSnapshots.$inferSelect;
+export type NewIntelPinSnapshot = typeof intelPinSnapshots.$inferInsert;

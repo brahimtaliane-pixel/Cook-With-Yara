@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "images.imaginepro.ai",
       },
+      {
+        protocol: "https",
+        hostname: "i.pinimg.com",
+      },
     ],
   },
 };

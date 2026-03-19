@@ -1,0 +1,306 @@
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { intelPins, keywords, articles } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
+import { generateSlug } from "@/lib/utils/slug";
+import { ArticleStatus, KeywordStatus } from "@/lib/constants";
+import { generateArticleContent } from "@/lib/services/ai-writer";
+import { submitImagineJob, checkImagineJob } from "@/lib/services/imagineapi";
+import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
+import { createPin } from "@/lib/services/pinterest";
+import { getCanonicalUrl } from "@/lib/utils/seo";
+import { put } from "@vercel/blob";
+
+export const maxDuration = 300;
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as { pinId: string };
+
+  if (!body.pinId) {
+    return NextResponse.json(
+      { error: "pinId is required" },
+      { status: 400 }
+    );
+  }
+
+  // 1. Read pin from intelPins
+  const [pin] = await db
+    .select()
+    .from(intelPins)
+    .where(eq(intelPins.id, body.pinId))
+    .limit(1);
+
+  if (!pin) {
+    return NextResponse.json({ error: "Pin not found" }, { status: 404 });
+  }
+
+  if (pin.sentToPipeline) {
+    return NextResponse.json(
+      { error: "Pin already sent to pipeline" },
+      { status: 409 }
+    );
+  }
+
+  // 2. Use pin title as keyword
+  const keyword = pin.title;
+  const slug = generateSlug(keyword);
+
+  const [existingArticle] = await db
+    .select({ id: articles.id })
+    .from(articles)
+    .where(eq(articles.slug, slug))
+    .limit(1);
+
+  if (existingArticle) {
+    return NextResponse.json(
+      { error: "An article with this slug already exists" },
+      { status: 409 }
+    );
+  }
+
+  // Stream progress updates to the client
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      function sendEvent(data: Record<string, unknown>) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(data)}\n\n`)
+        );
+      }
+
+      try {
+        // --- Stage 1: Create keyword + article ---
+        sendEvent({ stage: "creating", message: "Creating article..." });
+
+        const [newKeyword] = await db
+          .insert(keywords)
+          .values({
+            keyword,
+            status: "approved",
+            trendType: "intel",
+            pinterestTrendScore: pin.velocity,
+          })
+          .returning({ id: keywords.id });
+
+        const [newArticle] = await db
+          .insert(articles)
+          .values({
+            keywordId: newKeyword.id,
+            slug,
+            status: ArticleStatus.CONTENT_GENERATING,
+          })
+          .returning();
+
+        // Mark pin as sent
+        await db
+          .update(intelPins)
+          .set({
+            sentToPipeline: true,
+            pipelineKeywordId: newKeyword.id,
+            updatedAt: new Date(),
+          })
+          .where(eq(intelPins.id, body.pinId));
+
+        // --- Stage 2: Generate content via Claude ---
+        sendEvent({ stage: "content", message: "Writing article with AI..." });
+
+        const content = await generateArticleContent(keyword);
+
+        // Sanitize prompt for ImaginePro content filter
+        const sanitizedPrompt = content.midjourneyPrompt
+          .replace(/\bbreast(s)?\b/gi, "fillet$1")
+          .replace(/\bthigh(s)?\b/gi, "piece$1")
+          .replace(/\bnaked\b/gi, "plain")
+          .replace(/\bbare\b/gi, "simple");
+
+        await db
+          .update(articles)
+          .set({
+            title: content.title,
+            metaDescription: content.metaDescription,
+            contentMdx: content.contentMdx,
+            recipeJsonLd: content.recipeJsonLd,
+            midjourneyPrompt: sanitizedPrompt,
+            status: ArticleStatus.CONTENT_READY,
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, newArticle.id));
+
+        await db
+          .update(keywords)
+          .set({ status: KeywordStatus.COMPLETED, updatedAt: new Date() })
+          .where(eq(keywords.id, newKeyword.id));
+
+        // --- Stage 3: Generate hero image via Midjourney ---
+        sendEvent({ stage: "image", message: "Generating hero image..." });
+
+        const taskId = await submitImagineJob(sanitizedPrompt);
+
+        await db
+          .update(articles)
+          .set({
+            midjourneyTaskId: taskId,
+            status: ArticleStatus.IMAGE_GENERATING,
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, newArticle.id));
+
+        // Poll until complete (max ~5 minutes)
+        let heroImageUrl: string | null = null;
+        const maxPolls = 60; // 60 * 5s = 5 minutes
+        for (let i = 0; i < maxPolls; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const result = await checkImagineJob(taskId);
+
+          if (result.status === "completed" && result.result) {
+            // Download and upload to Vercel Blob
+            const imageResponse = await fetch(result.result);
+            if (!imageResponse.ok) {
+              throw new Error(`Failed to download image: ${imageResponse.status}`);
+            }
+            const imageBlob = await imageResponse.blob();
+            const { url } = await put(
+              `recipes/${slug}/hero.jpg`,
+              imageBlob,
+              { access: "public" }
+            );
+            heroImageUrl = url;
+
+            await db
+              .update(articles)
+              .set({
+                heroImageUrl: url,
+                status: ArticleStatus.IMAGE_READY,
+                updatedAt: new Date(),
+              })
+              .where(eq(articles.id, newArticle.id));
+
+            sendEvent({ stage: "image_done", message: "Hero image ready!" });
+            break;
+          } else if (result.status === "failed") {
+            throw new Error("Midjourney image generation failed");
+          }
+
+          // Still processing — send progress
+          if (i % 3 === 0) {
+            sendEvent({
+              stage: "image",
+              message: "Generating hero image...",
+            });
+          }
+        }
+
+        if (!heroImageUrl) {
+          throw new Error("Image generation timed out");
+        }
+
+        // --- Stage 4: Generate pin images ---
+        sendEvent({ stage: "pins", message: "Creating pin designs..." });
+
+        await db
+          .update(articles)
+          .set({ status: ArticleStatus.PIN_GENERATING, updatedAt: new Date() })
+          .where(eq(articles.id, newArticle.id));
+
+        const pinParams = {
+          title: content.title,
+          heroImageUrl,
+        };
+
+        const [pngBuffer1, pngBuffer2] = await Promise.all([
+          generatePinImage(pinParams),
+          generatePinImageSimple(pinParams),
+        ]);
+
+        const [blob1, blob2] = await Promise.all([
+          put(`recipes/${slug}/pin.png`, pngBuffer1, { access: "public" }),
+          put(`recipes/${slug}/pin2.png`, pngBuffer2, { access: "public" }),
+        ]);
+
+        await db
+          .update(articles)
+          .set({
+            pinImageUrl: blob1.url,
+            pinImageUrl2: blob2.url,
+            status: ArticleStatus.PIN_READY,
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, newArticle.id));
+
+        // --- Stage 5: Publish ---
+        sendEvent({ stage: "publishing", message: "Publishing article..." });
+
+        await db
+          .update(articles)
+          .set({ status: ArticleStatus.PUBLISHING, updatedAt: new Date() })
+          .where(eq(articles.id, newArticle.id));
+
+        const canonicalUrl = getCanonicalUrl(slug);
+
+        // Trigger ISR revalidation
+        const siteUrl =
+          process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
+        await fetch(
+          `${siteUrl}/api/revalidate?slug=${slug}&secret=${process.env.CRON_SECRET}`
+        );
+
+        // Try Pinterest pin
+        let pinterestPinId: string | null = null;
+        const boardId = process.env.PINTEREST_BOARD_ID;
+
+        if (boardId) {
+          try {
+            const pinterestPin = await createPin({
+              boardId,
+              title: content.title,
+              description: content.metaDescription,
+              imageUrl: blob1.url,
+              link: canonicalUrl,
+            });
+            pinterestPinId = pinterestPin.id;
+          } catch (pinError) {
+            console.warn(
+              `Pinterest pin creation failed for ${slug}:`,
+              pinError instanceof Error ? pinError.message : pinError
+            );
+          }
+        }
+
+        await db
+          .update(articles)
+          .set({
+            pinterestPinId,
+            publishedUrl: canonicalUrl,
+            publishedAt: new Date(),
+            status: ArticleStatus.PUBLISHED,
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, newArticle.id));
+
+        // --- Done ---
+        sendEvent({
+          stage: "done",
+          message: "Published!",
+          articleId: newArticle.id,
+          slug,
+          url: canonicalUrl,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown error";
+        console.error("[send-to-pipeline] Pipeline failed:", error);
+        sendEvent({ stage: "error", message });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}

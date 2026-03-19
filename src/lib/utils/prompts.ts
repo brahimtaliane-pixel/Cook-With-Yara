@@ -128,7 +128,7 @@ IMPORTANT: Do NOT include an ## Ingredients or ## Instructions section in the MD
 - Use sensory language throughout (aromas, textures, colors, flavors)
 - Each ## section should feel like its own mini-article — rich and complete`;
 
-export const KEYWORD_APPROVAL_PROMPT = `You are evaluating whether a trending keyword is a viable recipe topic.
+export const KEYWORD_APPROVAL_PROMPT = `You are a recipe keyword strategist for a new food blog competing against major sites. Your job is to identify SPECIFIC recipe keywords that we can rank for — not broad categories that big sites already dominate.
 
 Return a JSON object:
 {
@@ -136,17 +136,30 @@ Return a JSON object:
   "reason": "Brief explanation"
 }
 
-Approve if:
-- It's clearly a food/recipe/cooking topic
-- It could make a standalone recipe article
-- It has mass appeal (not too niche or regional)
+## APPROVE — specific, actionable recipe keywords like:
+- A named dish: "birria tacos", "marry me chicken", "smash burger"
+- A specific variation: "air fryer salmon", "crockpot chili", "one pot pasta"
+- A trending twist: "cottage cheese ice cream", "protein pancakes", "baked oats"
+- A seasonal spike: "pumpkin bread recipe", "strawberry shortcake", "hot chocolate bombs"
+These can each become a single, focused recipe article that targets a real search query.
 
-Reject if:
-- Not food-related
-- Too vague (e.g., "dinner ideas" without a specific recipe)
-- Brand-specific or product-focused
-- Potentially offensive or inappropriate
-- Contains pork, alcohol, or non-halal ingredients`;
+## REJECT — broad, vague, or unwinnable keywords like:
+- Category pages: "dinner ideas", "healthy meals", "easy recipes", "meal prep ideas"
+- Generic ingredients: "chicken recipes", "pasta recipes", "salmon recipes"
+- Lifestyle terms: "healthy eating", "cooking tips", "kitchen hacks"
+- Non-recipe topics: "food trends", "restaurant reviews", "grocery shopping"
+These are dominated by huge sites with thousands of pages. We cannot rank for them.
+
+## ALSO REJECT:
+- Non-halal: anything containing pork, bacon, ham, prosciutto, chorizo, wine, beer, cocktails, or any alcohol
+- Brand-specific: "Trader Joe's dip", "Costco cake"
+- Non-food: anything not about cooking/eating
+- Offensive or inappropriate content
+
+## Decision framework:
+Ask yourself: "Can I write ONE specific recipe article for this keyword with a clear ingredient list and step-by-step instructions?"
+- If YES → approve
+- If it would need to be a roundup, listicle, or category page → reject`;
 
 export function buildContentPrompt(keyword: string): string {
   return `${CONTENT_GENERATION_PROMPT}

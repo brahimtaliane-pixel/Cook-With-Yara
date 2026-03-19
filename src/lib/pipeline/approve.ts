@@ -28,18 +28,44 @@ export async function approveKeywords(): Promise<{ processed: number }> {
     return { processed: 0 };
   }
 
-  // Get top keywords by trend score
+  // Get top keywords by trend score — fetch extra to account for duplicates/rejections
   const pendingKeywords = await db
     .select()
     .from(keywords)
     .where(eq(keywords.status, KeywordStatus.NEW))
     .orderBy(desc(keywords.pinterestTrendScore))
-    .limit(remaining);
+    .limit(remaining * 3);
 
   let processed = 0;
+  let approved = 0;
 
   for (const kw of pendingKeywords) {
+    // Stop once we've approved enough for today
+    if (approved >= remaining) break;
+
     try {
+      // Check for slug collision before calling Claude
+      const slug = generateSlug(kw.keyword);
+      const [existingArticle] = await db
+        .select({ id: articles.id })
+        .from(articles)
+        .where(eq(articles.slug, slug))
+        .limit(1);
+
+      if (existingArticle) {
+        // Slug already exists — reject as duplicate
+        await db
+          .update(keywords)
+          .set({
+            status: KeywordStatus.REJECTED,
+            failureReason: `Duplicate: article with slug "${slug}" already exists`,
+            updatedAt: new Date(),
+          })
+          .where(eq(keywords.id, kw.id));
+        processed++;
+        continue;
+      }
+
       const evaluation = await evaluateKeyword(kw.keyword);
 
       if (evaluation.approved) {
@@ -50,7 +76,6 @@ export async function approveKeywords(): Promise<{ processed: number }> {
           .where(eq(keywords.id, kw.id));
 
         // Create article stub
-        const slug = generateSlug(kw.keyword);
         await db
           .insert(articles)
           .values({
@@ -59,10 +84,16 @@ export async function approveKeywords(): Promise<{ processed: number }> {
             status: ArticleStatus.DRAFT,
           })
           .onConflictDoNothing({ target: articles.slug });
+
+        approved++;
       } else {
         await db
           .update(keywords)
-          .set({ status: KeywordStatus.REJECTED, updatedAt: new Date() })
+          .set({
+            status: KeywordStatus.REJECTED,
+            failureReason: evaluation.reason,
+            updatedAt: new Date(),
+          })
           .where(eq(keywords.id, kw.id));
       }
 

@@ -50,4 +50,163 @@ export const ConfigKeys = {
   PIPELINE_ENABLED: "pipeline_enabled",
   MAX_ARTICLES_PER_DAY: "max_articles_per_day",
   TARGET_REGION: "target_region",
+  PINTEREST_ACCESS_TOKEN: "pinterest_access_token",
+  PINTEREST_REFRESH_TOKEN: "pinterest_refresh_token",
+  PINTEREST_TOKEN_EXPIRES_AT: "pinterest_token_expires_at",
+  PINTEREST_USER_NAME: "pinterest_user_name",
+  PINTEREST_BOARDS: "pinterest_boards",
+  PINTEREST_BOARD_ID: "pinterest_board_id",
 } as const;
+
+// === Intel ===
+
+export const IntelSource = {
+  RSS: "rss",
+  SEARCH: "search",
+  LOOKUP: "lookup",
+  TRENDING: "trending",
+} as const;
+
+export type IntelSource = (typeof IntelSource)[keyof typeof IntelSource];
+
+export const INTEL_DEFAULTS = {
+  WIDGET_API_BATCH_SIZE: 50,
+  DEFAULT_PIN_LIMIT: 100,
+  REFRESH_INTERVAL_HOURS: 4,
+  MIN_VELOCITY_THRESHOLD: 10,
+  TRENDING_PINS_PER_QUERY: 30,
+  QUERIES_PER_REFRESH: 8,
+} as const;
+
+
+// === Food Detection ===
+
+export const FOOD_INDICATORS = [
+  // Core terms
+  "recipe", "recipes", "cook", "cooking", "bake", "baking",
+  "food", "meal", "dinner", "lunch", "breakfast", "snack", "brunch",
+  // Dish types
+  "dessert", "soup", "salad", "cake", "bread", "pasta", "casserole",
+  "stew", "curry", "pizza", "sandwich", "smoothie", "appetizer",
+  "side dish", "sauce", "dip", "marinade", "pie", "cookie", "brownies",
+  "pancake", "waffle", "oatmeal", "rice", "noodle", "taco", "burrito",
+  "stir fry", "wrap", "bowl", "dumpling", "muffin", "scone", "pudding",
+  "frosting", "glaze", "chili", "biryani", "risotto", "lasagna",
+  "quiche", "frittata", "hummus", "falafel", "kebab", "shawarma",
+  // Proteins (halal only — no pork/bacon/ham)
+  "chicken", "beef", "fish", "seafood", "lamb", "turkey", "shrimp",
+  "salmon", "tuna", "cod", "tilapia", "tofu", "lentil", "chickpea",
+  // Cooking methods
+  "slow cooker", "instant pot", "air fryer", "grilled", "roasted",
+  "fried", "smoked", "sauteed", "braised", "steamed", "poached",
+  // Diet styles
+  "vegan", "vegetarian", "healthy", "keto", "gluten free", "low carb",
+  "high protein", "dairy free", "whole30", "mediterranean",
+  // Speed/ease
+  "easy", "quick", "one pot", "sheet pan", "no bake", "5 ingredient",
+  "30 minute", "weeknight", "meal prep",
+] as const;
+
+// Keywords that should never pass through (non-halal)
+export const FOOD_BLOCKLIST = [
+  "pork", "bacon", "ham", "prosciutto", "chorizo",
+  "wine", "beer", "cocktail", "margarita", "sangria",
+  "liquor", "vodka", "rum", "whiskey", "bourbon",
+] as const;
+
+export const TREND_THRESHOLDS = {
+  ACCELERATION_HIGH: 20,
+  ACCELERATION_MODERATE: 5,
+  BASELINE_MULTIPLE_HIGH: 3,
+  BASELINE_MULTIPLE_MODERATE: 1.5,
+  FRESHNESS_HALF_LIFE_DAYS: 7,
+  MAX_SNAPSHOT_AGE_DAYS: 30,
+} as const;
+
+export const TrendDirection = {
+  RISING: "rising",
+  FALLING: "falling",
+  STABLE: "stable",
+  NEW: "new",
+} as const;
+export type TrendDirection = (typeof TrendDirection)[keyof typeof TrendDirection];
+
+export const TRENDING_RECIPE_QUERIES = [
+  // --- By Cuisine ---
+  "italian recipes",
+  "mexican recipes",
+  "asian recipes",
+  "indian recipes",
+  "thai recipes",
+  "mediterranean recipes",
+  "korean recipes",
+  "japanese recipes",
+  "middle eastern recipes",
+  "greek recipes",
+  "chinese recipes",
+  "turkish recipes",
+
+  // --- By Protein (halal only) ---
+  "chicken breast recipes",
+  "ground beef recipes",
+  "salmon recipes",
+  "shrimp recipes",
+  "lamb recipes",
+  "turkey recipes",
+  "beef stew recipes",
+  "fish recipes",
+
+  // --- By Cooking Method ---
+  "air fryer recipes",
+  "instant pot recipes",
+  "slow cooker recipes",
+  "sheet pan dinner",
+  "one pot meals",
+  "grilled recipes",
+  "no bake desserts",
+  "skillet recipes",
+  "cast iron recipes",
+
+  // --- By Diet ---
+  "keto recipes",
+  "low carb dinner",
+  "high protein meals",
+  "vegan dinner recipes",
+  "gluten free recipes",
+  "whole30 recipes",
+  "dairy free recipes",
+  "mediterranean diet recipes",
+  "plant based recipes",
+
+  // --- By Meal Type ---
+  "easy dinner recipes",
+  "quick lunch ideas",
+  "healthy breakfast recipes",
+  "meal prep ideas",
+  "appetizer recipes",
+  "side dish recipes",
+  "snack recipes",
+  "brunch recipes",
+  "potluck recipes",
+
+  // --- Trending / Seasonal ---
+  "comfort food recipes",
+  "summer recipes",
+  "holiday baking",
+  "soup recipes winter",
+  "salad recipes",
+  "smoothie bowl",
+  "overnight oats",
+  "budget friendly meals",
+  "5 ingredient recipes",
+  "30 minute meals",
+  "weeknight dinner ideas",
+
+  // --- Desserts ---
+  "chocolate dessert recipes",
+  "cake recipes",
+  "cookie recipes",
+  "brownie recipes",
+  "cheesecake recipes",
+  "ice cream recipes",
+] as const;
