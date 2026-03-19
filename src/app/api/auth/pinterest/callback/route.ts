@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { pipelineConfig } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { ConfigKeys } from "@/lib/constants";
+import { getAppCredentials } from "@/lib/services/pinterest";
 
 const PINTEREST_API_BASE = "https://api.pinterest.com/v5";
 
@@ -26,12 +27,19 @@ async function setConfigValue(key: string, value: string) {
 
 export async function GET(request: NextRequest) {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  const appId = process.env.PINTEREST_APP_ID;
-  const appSecret = process.env.PINTEREST_APP_SECRET;
+  if (!siteUrl) {
+    return NextResponse.json({ error: "NEXT_PUBLIC_SITE_URL not set" }, { status: 500 });
+  }
 
-  if (!siteUrl || !appId || !appSecret) {
+  let appId: string;
+  let appSecret: string;
+  try {
+    const creds = await getAppCredentials();
+    appId = creds.appId;
+    appSecret = creds.appSecret;
+  } catch {
     return NextResponse.redirect(
-      `${siteUrl ?? ""}/admin/config?pinterest=error&reason=missing_env`,
+      `${siteUrl}/admin/config?pinterest=error&reason=missing_app_credentials`,
     );
   }
 

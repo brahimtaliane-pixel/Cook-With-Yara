@@ -6,6 +6,8 @@ import { inArray } from "drizzle-orm";
 
 export async function GET() {
   const keys = [
+    ConfigKeys.PINTEREST_APP_ID,
+    ConfigKeys.PINTEREST_APP_SECRET,
     ConfigKeys.PINTEREST_ACCESS_TOKEN,
     ConfigKeys.PINTEREST_TOKEN_EXPIRES_AT,
     ConfigKeys.PINTEREST_USER_NAME,
@@ -23,10 +25,18 @@ export async function GET() {
     configMap[row.key] = row.value;
   }
 
+  const hasAppId = !!(configMap[ConfigKeys.PINTEREST_APP_ID] || process.env.PINTEREST_APP_ID);
+  const hasAppSecret = !!(configMap[ConfigKeys.PINTEREST_APP_SECRET] || process.env.PINTEREST_APP_SECRET);
+  const appConfigured = hasAppId && hasAppSecret;
+
   const connected = !!configMap[ConfigKeys.PINTEREST_ACCESS_TOKEN];
   const userName = configMap[ConfigKeys.PINTEREST_USER_NAME] ?? null;
   const selectedBoardId = configMap[ConfigKeys.PINTEREST_BOARD_ID] ?? null;
   const tokenExpiresAt = configMap[ConfigKeys.PINTEREST_TOKEN_EXPIRES_AT] ?? null;
+
+  // Mask the stored values — just show whether they're set
+  const savedAppId = configMap[ConfigKeys.PINTEREST_APP_ID] ?? "";
+  const savedAppSecret = configMap[ConfigKeys.PINTEREST_APP_SECRET] ?? "";
 
   let boards: { id: string; name: string }[] = [];
   const boardsJson = configMap[ConfigKeys.PINTEREST_BOARDS];
@@ -39,6 +49,9 @@ export async function GET() {
   }
 
   return NextResponse.json({
+    appConfigured,
+    savedAppId,
+    savedAppSecret,
     connected,
     userName,
     selectedBoardId,

@@ -13,6 +13,9 @@ import { ConfigKeys } from "@/lib/constants";
 type ConfigMap = Record<string, string>;
 
 interface PinterestStatus {
+  appConfigured: boolean;
+  savedAppId: string;
+  savedAppSecret: string;
   connected: boolean;
   userName: string | null;
   selectedBoardId: string | null;
@@ -46,6 +49,11 @@ function ConfigPageInner() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [savingBoard, setSavingBoard] = useState(false);
 
+  // Pinterest app credentials (local form state)
+  const [appId, setAppId] = useState("");
+  const [appSecret, setAppSecret] = useState("");
+  const [savingCreds, setSavingCreds] = useState(false);
+
   const searchParams = useSearchParams();
 
   const fetchPinterestStatus = useCallback(() => {
@@ -54,6 +62,8 @@ function ConfigPageInner() {
       .then((r) => r.json())
       .then((data: PinterestStatus) => {
         setPinterest(data);
+        setAppId(data.savedAppId);
+        setAppSecret(data.savedAppSecret);
         setPinterestLoading(false);
       })
       .catch(() => setPinterestLoading(false));
@@ -76,14 +86,19 @@ function ConfigPageInner() {
     const pinterestParam = searchParams.get("pinterest");
     if (pinterestParam === "connected") {
       setPinterestMessage("Pinterest connected successfully!");
-      // Clear the URL params
+      fetchPinterestStatus();
       window.history.replaceState({}, "", "/admin/config");
     } else if (pinterestParam === "error") {
       const reason = searchParams.get("reason") ?? "unknown";
-      setPinterestMessage(`Pinterest connection failed: ${reason}`);
+      const messages: Record<string, string> = {
+        missing_app_credentials: "Enter your Pinterest App ID and App Secret first, then try connecting again.",
+        token_exchange_failed: "Token exchange failed. Check your App ID and App Secret.",
+        invalid_state: "Invalid state — try connecting again.",
+      };
+      setPinterestMessage(messages[reason] ?? `Connection failed: ${reason}`);
       window.history.replaceState({}, "", "/admin/config");
     }
-  }, [searchParams]);
+  }, [searchParams, fetchPinterestStatus]);
 
   async function handleSave() {
     setSaving(true);
@@ -103,6 +118,32 @@ function ConfigPageInner() {
       setMessage("Failed to save.");
     }
     setSaving(false);
+  }
+
+  async function handleSaveCredentials() {
+    setSavingCreds(true);
+    setPinterestMessage("");
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          config: {
+            [ConfigKeys.PINTEREST_APP_ID]: appId,
+            [ConfigKeys.PINTEREST_APP_SECRET]: appSecret,
+          },
+        }),
+      });
+      if (res.ok) {
+        setPinterestMessage("Credentials saved.");
+        fetchPinterestStatus();
+      } else {
+        setPinterestMessage("Failed to save credentials.");
+      }
+    } catch {
+      setPinterestMessage("Failed to save credentials.");
+    }
+    setSavingCreds(false);
   }
 
   async function handleDisconnect() {
@@ -230,7 +271,7 @@ function ConfigPageInner() {
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-5">
           {pinterestLoading ? (
             <p className="text-sm text-muted-foreground">
               Loading Pinterest status...
@@ -285,17 +326,67 @@ function ConfigPageInner() {
             </>
           ) : (
             <>
-              {/* Disconnected state */}
-              <p className="text-sm text-muted-foreground">
-                Connect your Pinterest Business account to post pins directly
-                from the admin panel.
-              </p>
-              <a
-                href="/api/auth/pinterest"
-                className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/80"
-              >
-                Connect Pinterest
-              </a>
+              {/* Setup: App credentials + Connect */}
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Enter your Pinterest API credentials from the{" "}
+                  <a
+                    href="https://developers.pinterest.com/apps/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline underline-offset-2"
+                  >
+                    Pinterest Developer Console
+                  </a>
+                  , then connect your account.
+                </p>
+
+                <div className="space-y-2">
+                  <Label htmlFor="pinterest-app-id">App ID</Label>
+                  <Input
+                    id="pinterest-app-id"
+                    placeholder="e.g. 1234567890"
+                    value={appId}
+                    onChange={(e) => setAppId(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="pinterest-app-secret">App Secret</Label>
+                  <Input
+                    id="pinterest-app-secret"
+                    type="password"
+                    placeholder="e.g. abc123def456..."
+                    value={appSecret}
+                    onChange={(e) => setAppSecret(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={handleSaveCredentials}
+                    disabled={savingCreds || !appId || !appSecret}
+                  >
+                    {savingCreds ? "Saving..." : "Save Credentials"}
+                  </Button>
+
+                  {pinterest?.appConfigured && (
+                    <a
+                      href="/api/auth/pinterest"
+                      className="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/80"
+                    >
+                      Connect Pinterest
+                    </a>
+                  )}
+                </div>
+
+                {!pinterest?.appConfigured && appId && appSecret && (
+                  <p className="text-xs text-muted-foreground">
+                    Save your credentials first, then the Connect button will appear.
+                  </p>
+                )}
+              </div>
             </>
           )}
 

@@ -1,20 +1,23 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { getAppCredentials } from "@/lib/services/pinterest";
 
 export async function GET() {
-  const appId = process.env.PINTEREST_APP_ID;
-  if (!appId) {
-    return NextResponse.json(
-      { error: "PINTEREST_APP_ID is not configured" },
-      { status: 500 },
-    );
-  }
-
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!siteUrl) {
     return NextResponse.json(
       { error: "NEXT_PUBLIC_SITE_URL is not configured" },
       { status: 500 },
+    );
+  }
+
+  let appId: string;
+  try {
+    const creds = await getAppCredentials();
+    appId = creds.appId;
+  } catch {
+    return NextResponse.redirect(
+      `${siteUrl}/admin/config?pinterest=error&reason=missing_app_credentials`,
     );
   }
 

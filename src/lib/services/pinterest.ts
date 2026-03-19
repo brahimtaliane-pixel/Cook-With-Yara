@@ -76,17 +76,22 @@ async function setConfigValue(key: string, value: string): Promise<void> {
   }
 }
 
+export async function getAppCredentials(): Promise<{ appId: string; appSecret: string }> {
+  const appId = await getConfigValue(ConfigKeys.PINTEREST_APP_ID) ?? process.env.PINTEREST_APP_ID;
+  const appSecret = await getConfigValue(ConfigKeys.PINTEREST_APP_SECRET) ?? process.env.PINTEREST_APP_SECRET;
+  if (!appId || !appSecret) {
+    throw new Error("Pinterest App ID and App Secret are not configured. Set them in Admin > Config.");
+  }
+  return { appId, appSecret };
+}
+
 export async function refreshAccessToken(): Promise<string> {
   const refreshToken = await getConfigValue(ConfigKeys.PINTEREST_REFRESH_TOKEN);
   if (!refreshToken) {
     throw new Error("No Pinterest refresh token available");
   }
 
-  const appId = process.env.PINTEREST_APP_ID;
-  const appSecret = process.env.PINTEREST_APP_SECRET;
-  if (!appId || !appSecret) {
-    throw new Error("PINTEREST_APP_ID and PINTEREST_APP_SECRET must be set");
-  }
+  const { appId, appSecret } = await getAppCredentials();
 
   const res = await fetch(`${PINTEREST_API_BASE}/oauth/token`, {
     method: "POST",

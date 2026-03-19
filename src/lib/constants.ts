@@ -50,6 +50,8 @@ export const ConfigKeys = {
   PIPELINE_ENABLED: "pipeline_enabled",
   MAX_ARTICLES_PER_DAY: "max_articles_per_day",
   TARGET_REGION: "target_region",
+  PINTEREST_APP_ID: "pinterest_app_id",
+  PINTEREST_APP_SECRET: "pinterest_app_secret",
   PINTEREST_ACCESS_TOKEN: "pinterest_access_token",
   PINTEREST_REFRESH_TOKEN: "pinterest_refresh_token",
   PINTEREST_TOKEN_EXPIRES_AT: "pinterest_token_expires_at",
