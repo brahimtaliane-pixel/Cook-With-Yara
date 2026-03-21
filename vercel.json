@@ -7,7 +7,7 @@
     { "path": "/api/cron/poll-images", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/create-pin-image", "schedule": "5,35 7-23 * * *" },
     { "path": "/api/cron/publish-and-pin", "schedule": "20,50 7-23 * * *" },
-    { "path": "/api/cron/cleanup", "schedule": "0 3 * * 0" },
+    { "path": "/api/cron/cleanup", "schedule": "0 */6 * * *" },
     { "path": "/api/cron/intel-refresh", "schedule": "0 * * * *" }
   ]
 }

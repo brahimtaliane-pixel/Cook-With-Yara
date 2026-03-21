@@ -43,8 +43,8 @@ export async function cleanup(): Promise<{ processed: number }> {
     processed++;
   }
 
-  // 2. Reset stuck articles (in generating states for >2 hours)
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  // 2. Reset stuck articles (in generating states for >15 min — Vercel max is 60s)
+  const fifteenMinAgo = new Date(Date.now() - 15 * 60 * 1000);
   const stuckStatuses = [
     ArticleStatus.CONTENT_GENERATING,
     ArticleStatus.IMAGE_GENERATING,
@@ -64,7 +64,7 @@ export async function cleanup(): Promise<{ processed: number }> {
       .where(
         and(
           eq(articles.status, status),
-          lt(articles.updatedAt, twoHoursAgo)
+          lt(articles.updatedAt, fifteenMinAgo)
         )
       )
       .returning();
