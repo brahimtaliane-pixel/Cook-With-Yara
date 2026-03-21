@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { intelPins, keywords, articles } from "@/lib/db/schema";
+import { intelPins, keywords, articles, pinQueue } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { generateSlug } from "@/lib/utils/slug";
 import { ArticleStatus, KeywordStatus } from "@/lib/constants";
 import { generateArticleContent } from "@/lib/services/ai-writer";
 import { submitImagineJob, checkImagineJob } from "@/lib/services/imagineapi";
 import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
-import { createPin } from "@/lib/services/pinterest";
 import { getCanonicalUrl } from "@/lib/utils/seo";
 import { put } from "@vercel/blob";
 
@@ -244,32 +243,27 @@ export async function POST(request: Request) {
           `${siteUrl}/api/revalidate?slug=${slug}&secret=${process.env.CRON_SECRET}`
         );
 
-        // Try Pinterest pin
-        let pinterestPinId: string | null = null;
-        const boardId = process.env.PINTEREST_BOARD_ID;
-
-        if (boardId) {
-          try {
-            const pinterestPin = await createPin({
-              boardId,
-              title: content.title,
-              description: content.metaDescription,
-              imageUrl: blob1.url,
-              link: canonicalUrl,
-            });
-            pinterestPinId = pinterestPin.id;
-          } catch (pinError) {
-            console.warn(
-              `Pinterest pin creation failed for ${slug}:`,
-              pinError instanceof Error ? pinError.message : pinError
-            );
-          }
-        }
+        // Queue both pin designs for scheduled posting
+        await db.insert(pinQueue).values({
+          articleId: newArticle.id,
+          imageUrl: blob1.url,
+          pinDesign: 1,
+          title: content.title,
+          description: content.metaDescription,
+          link: canonicalUrl,
+        });
+        await db.insert(pinQueue).values({
+          articleId: newArticle.id,
+          imageUrl: blob2.url,
+          pinDesign: 2,
+          title: content.title,
+          description: content.metaDescription,
+          link: canonicalUrl,
+        });
 
         await db
           .update(articles)
           .set({
-            pinterestPinId,
             publishedUrl: canonicalUrl,
             publishedAt: new Date(),
             status: ArticleStatus.PUBLISHED,

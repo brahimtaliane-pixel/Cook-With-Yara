@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
-import { articles } from "@/lib/db/schema";
+import { articles, pinQueue } from "@/lib/db/schema";
 import { ArticleStatus } from "@/lib/constants";
-import { createPin } from "@/lib/services/pinterest";
 import { getCanonicalUrl } from "@/lib/utils/seo";
 import { shouldRetry } from "@/lib/pipeline/base";
 import { eq, and, sql } from "drizzle-orm";
@@ -37,32 +36,31 @@ export async function publishAndPin(): Promise<{ processed: number }> {
       process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
     await fetch(`${siteUrl}/api/revalidate?slug=${article.slug}&secret=${process.env.CRON_SECRET}`);
 
-    // Try Pinterest — but don't block publishing if it fails
-    let pinterestPinId: string | null = null;
-    const boardId = process.env.PINTEREST_BOARD_ID;
-
-    if (boardId) {
-      try {
-        const pin = await createPin({
-          boardId,
-          title: article.title || "Delicious Recipe",
-          description: article.metaDescription || "",
-          imageUrl: article.pinImageUrl || article.heroImageUrl || "",
-          link: canonicalUrl,
-        });
-        pinterestPinId = pin.id;
-      } catch (pinError) {
-        console.warn(
-          `Pinterest pin creation failed for ${article.slug}, publishing without pin:`,
-          pinError instanceof Error ? pinError.message : pinError
-        );
-      }
+    // Queue both pin designs for scheduled posting
+    if (article.pinImageUrl) {
+      await db.insert(pinQueue).values({
+        articleId: article.id,
+        imageUrl: article.pinImageUrl,
+        pinDesign: 1,
+        title: article.title || "Delicious Recipe",
+        description: article.metaDescription || "",
+        link: canonicalUrl,
+      });
+    }
+    if (article.pinImageUrl2) {
+      await db.insert(pinQueue).values({
+        articleId: article.id,
+        imageUrl: article.pinImageUrl2,
+        pinDesign: 2,
+        title: article.title || "Delicious Recipe",
+        description: article.metaDescription || "",
+        link: canonicalUrl,
+      });
     }
 
     await db
       .update(articles)
       .set({
-        pinterestPinId,
         publishedUrl: canonicalUrl,
         publishedAt: new Date(),
         status: ArticleStatus.PUBLISHED,

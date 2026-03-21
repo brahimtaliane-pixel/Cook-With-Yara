@@ -42,6 +42,8 @@ export const PIPELINE_DEFAULTS = {
   TARGET_REGION: "US",
   PINTEREST_PIN_WIDTH: 1000,
   PINTEREST_PIN_HEIGHT: 1500,
+  AUTOPILOT_MIN_SCORE: 65,
+  AUTOPILOT_MAX_PER_RUN: 2,
 } as const;
 
 // === Pipeline Config Keys ===
@@ -58,6 +60,11 @@ export const ConfigKeys = {
   PINTEREST_USER_NAME: "pinterest_user_name",
   PINTEREST_BOARDS: "pinterest_boards",
   PINTEREST_BOARD_ID: "pinterest_board_id",
+  AUTOPILOT_ENABLED: "autopilot_enabled",
+  AUTOPILOT_MIN_SCORE: "autopilot_min_score",
+  AUTOPILOT_MAX_PER_RUN: "autopilot_max_per_run",
+  PINTEREST_MODE: "pinterest_mode",
+  PINTEREST_SESSION_COOKIE: "pinterest_session_cookie",
 } as const;
 
 // === Intel ===

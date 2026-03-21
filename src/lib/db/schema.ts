@@ -119,6 +119,45 @@ export const intelPinSnapshots = pgTable("intel_pin_snapshots", {
   snapshotAt: timestamp("snapshot_at").defaultNow().notNull(),
 });
 
+// === Autopilot Tables ===
+
+export const autopilotDecisions = pgTable("autopilot_decisions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id")
+    .references(() => pipelineRuns.id)
+    .notNull(),
+  intelPinId: uuid("intel_pin_id")
+    .references(() => intelPins.id)
+    .notNull(),
+  pinTitle: text("pin_title").notNull(),
+  pinScore: integer("pin_score").notNull(),
+  decision: text("decision").notNull(),
+  reason: text("reason").notNull(),
+  keywordId: uuid("keyword_id").references(() => keywords.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// === Pin Queue ===
+
+export const pinQueue = pgTable("pin_queue", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  articleId: uuid("article_id")
+    .references(() => articles.id)
+    .notNull(),
+  imageUrl: text("image_url").notNull(),
+  pinDesign: integer("pin_design").notNull(),
+  title: text("title").notNull(),
+  description: text("description").default("").notNull(),
+  link: text("link").notNull(),
+  status: text("status").default("pending").notNull(),
+  scheduledAt: timestamp("scheduled_at").defaultNow().notNull(),
+  postedAt: timestamp("posted_at"),
+  pinterestPinId: text("pinterest_pin_id"),
+  failureReason: text("failure_reason"),
+  retryCount: integer("retry_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Type exports
 export type Keyword = typeof keywords.$inferSelect;
 export type NewKeyword = typeof keywords.$inferInsert;
@@ -132,3 +171,7 @@ export type IntelPin = typeof intelPins.$inferSelect;
 export type NewIntelPin = typeof intelPins.$inferInsert;
 export type IntelPinSnapshot = typeof intelPinSnapshots.$inferSelect;
 export type NewIntelPinSnapshot = typeof intelPinSnapshots.$inferInsert;
+export type AutopilotDecision = typeof autopilotDecisions.$inferSelect;
+export type NewAutopilotDecision = typeof autopilotDecisions.$inferInsert;
+export type PinQueueItem = typeof pinQueue.$inferSelect;
+export type NewPinQueueItem = typeof pinQueue.$inferInsert;
