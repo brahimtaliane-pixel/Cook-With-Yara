@@ -93,7 +93,7 @@ export function ArticleActions({ article }: ArticleActionsProps) {
         </Button>
       )}
 
-      {article.status === "failed" && (
+      {["failed", "content_generating", "image_generating", "pin_generating", "publishing"].includes(article.status) && (
         <Button
           variant="outline"
           size="sm"

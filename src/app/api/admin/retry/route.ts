@@ -18,21 +18,27 @@ export async function POST(request: Request) {
     const [article] = await db
       .select()
       .from(articles)
-      .where(
-        and(eq(articles.id, body.id), eq(articles.status, ArticleStatus.FAILED))
-      )
+      .where(eq(articles.id, body.id))
       .limit(1);
 
     if (!article) {
       return NextResponse.json(
-        { error: "Article not found or not in failed state" },
+        { error: "Article not found" },
         { status: 404 }
       );
     }
 
-    if (article.retryCount >= PIPELINE_DEFAULTS.MAX_RETRIES) {
+    // Only allow retry for failed or stuck states
+    const retryableStatuses: string[] = [
+      ArticleStatus.FAILED,
+      ArticleStatus.CONTENT_GENERATING,
+      ArticleStatus.IMAGE_GENERATING,
+      ArticleStatus.PIN_GENERATING,
+      ArticleStatus.PUBLISHING,
+    ];
+    if (!retryableStatuses.includes(article.status)) {
       return NextResponse.json(
-        { error: "Max retries exceeded" },
+        { error: "Article is not in a retryable state" },
         { status: 400 }
       );
     }
@@ -41,6 +47,7 @@ export async function POST(request: Request) {
       .update(articles)
       .set({
         status: ArticleStatus.DRAFT,
+        retryCount: 0,
         failureReason: null,
         updatedAt: new Date(),
       })

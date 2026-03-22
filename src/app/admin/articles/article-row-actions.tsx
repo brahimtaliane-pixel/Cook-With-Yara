@@ -46,7 +46,7 @@ export function ArticleRowActions({ article }: ArticleRowActionsProps) {
 
   return (
     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-      {article.status === "failed" && (
+      {["failed", "content_generating", "image_generating", "pin_generating", "publishing"].includes(article.status) && (
         <Button
           variant="ghost"
           size="icon-xs"
