@@ -28,6 +28,7 @@ export function SendToPipelineButton({
   const [stage, setStage] = useState<string | null>(null);
   const [stageMessage, setStageMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [existingUrl, setExistingUrl] = useState<string | null>(null);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
 
   async function handleSend() {
@@ -45,6 +46,9 @@ export function SendToPipelineButton({
       if (!res.ok) {
         const data = await res.json();
         setError(data.error || "Failed");
+        if (data.existingArticle?.url) {
+          setExistingUrl(data.existingArticle.url);
+        }
         setLoading(false);
         return;
       }
@@ -102,18 +106,31 @@ export function SendToPipelineButton({
   if (error) {
     return (
       <div className="flex items-center gap-1.5">
-        <Button
-          variant="outline"
-          size="xs"
-          onClick={handleSend}
-          className="text-destructive"
-        >
-          <AlertCircle className="size-3" data-icon="inline-start" />
-          Retry
-        </Button>
-        <span className="text-[10px] text-destructive max-w-[120px] truncate">
-          {error}
-        </span>
+        {existingUrl ? (
+          <a
+            href={existingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[10px] text-amber-600 hover:text-amber-700 underline max-w-[180px] truncate"
+          >
+            {error}
+          </a>
+        ) : (
+          <>
+            <Button
+              variant="outline"
+              size="xs"
+              onClick={handleSend}
+              className="text-destructive"
+            >
+              <AlertCircle className="size-3" data-icon="inline-start" />
+              Retry
+            </Button>
+            <span className="text-[10px] text-destructive max-w-[120px] truncate">
+              {error}
+            </span>
+          </>
+        )}
       </div>
     );
   }

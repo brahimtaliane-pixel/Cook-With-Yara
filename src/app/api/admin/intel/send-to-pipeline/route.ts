@@ -45,14 +45,30 @@ export async function POST(request: Request) {
   const slug = generateSlug(keyword);
 
   const [existingArticle] = await db
-    .select({ id: articles.id })
+    .select({
+      id: articles.id,
+      title: articles.title,
+      slug: articles.slug,
+      status: articles.status,
+      publishedUrl: articles.publishedUrl,
+    })
     .from(articles)
     .where(eq(articles.slug, slug))
     .limit(1);
 
   if (existingArticle) {
+    const title = existingArticle.title || slug;
+    const url = existingArticle.publishedUrl || `/admin/articles/${existingArticle.id}`;
     return NextResponse.json(
-      { error: "An article with this slug already exists" },
+      {
+        error: `Already written: "${title}"`,
+        existingArticle: {
+          id: existingArticle.id,
+          title,
+          status: existingArticle.status,
+          url,
+        },
+      },
       { status: 409 }
     );
   }
