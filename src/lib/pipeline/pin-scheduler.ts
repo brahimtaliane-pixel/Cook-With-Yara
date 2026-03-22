@@ -2,14 +2,10 @@ import { db } from "@/lib/db";
 import { pinQueue } from "@/lib/db/schema";
 import { postPin } from "@/lib/services/pinterest-unified";
 import { getPinterestBoardId } from "@/lib/services/pinterest";
-import { randomDelay } from "@/lib/services/pinterest-direct";
 import { shouldRetry } from "@/lib/pipeline/base";
 import { eq, and, sql, lte } from "drizzle-orm";
 
 export async function processNextPin(runId: string): Promise<{ processed: number }> {
-  // Add a random initial delay (30-90s) to vary posting times
-  await randomDelay(30_000, 90_000);
-
   // Atomically claim one pending pin where scheduledAt <= now
   const now = new Date();
   const [item] = await db

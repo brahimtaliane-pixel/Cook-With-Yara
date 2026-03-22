@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { buildContentPrompt, buildApprovalPrompt } from "@/lib/utils/prompts";
+import { buildContentPrompt, buildApprovalPrompt, buildAutopilotPrompt } from "@/lib/utils/prompts";
 
 // === Types ===
 
@@ -71,6 +71,34 @@ export async function generateArticleContent(
     throw new Error(
       `Failed to parse article content from Claude: ${err instanceof Error ? err.message : String(err)}`,
     );
+  }
+}
+
+export interface AutopilotEvaluation {
+  approved: boolean;
+  reason: string;
+}
+
+export async function evaluatePinForAutopilot(context: {
+  pinTitle: string;
+  pinDescription: string;
+  pinScore: number;
+  recentArticleTitles: string[];
+}): Promise<AutopilotEvaluation> {
+  const prompt = buildAutopilotPrompt(context);
+  const raw = await callClaude(
+    "You are a recipe content strategist. Return only valid JSON.",
+    prompt,
+  );
+
+  try {
+    const parsed = JSON.parse(raw) as AutopilotEvaluation;
+    if (typeof parsed.approved !== "boolean" || !parsed.reason) {
+      return { approved: false, reason: "Failed to parse AI evaluation — defaulting to reject" };
+    }
+    return parsed;
+  } catch {
+    return { approved: false, reason: "Failed to parse AI evaluation — defaulting to reject" };
   }
 }
 

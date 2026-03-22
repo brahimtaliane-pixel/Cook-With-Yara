@@ -161,6 +161,59 @@ Ask yourself: "Can I write ONE specific recipe article for this keyword with a c
 - If YES → approve
 - If it would need to be a roundup, listicle, or category page → reject`;
 
+export const AUTOPILOT_EVALUATION_PROMPT = `You are a recipe content strategist for cookwithlucia.com, a halal food blog. Your job is to evaluate whether a trending Pinterest pin should be turned into a full recipe article.
+
+Return a JSON object:
+{
+  "approved": true/false,
+  "reason": "Brief explanation (1-2 sentences)"
+}
+
+## APPROVE if ALL of these are true:
+1. It's a SPECIFIC recipe (not a roundup, category, or generic food topic)
+2. It's halal-compliant (no pork, bacon, ham, alcohol, wine, beer, or any haram ingredients)
+3. It has real search potential (someone would Google this as a recipe query)
+4. It's NOT too similar to articles we've already written (check the recent articles list)
+5. It can be turned into a standalone recipe with ingredients + instructions
+
+## REJECT if ANY of these are true:
+- It's a broad category ("dinner ideas", "healthy meals") not a specific recipe
+- It contains non-halal ingredients (pork, bacon, ham, prosciutto, wine, beer, cocktails)
+- It's a brand-specific product ("Trader Joe's X", "Costco Y")
+- It's too similar to an article we already have (same dish, minor variation)
+- It's not food/recipe related
+- It's a food trend or lifestyle topic, not a cookable recipe
+
+## Score signal:
+- Score 85+: Strong trend signal, lean toward approval if criteria are met
+- Score 65-84: Moderate signal, apply criteria strictly
+- Score below 65: Should not reach you, but reject if it does
+
+Be decisive. When in doubt, reject — we prefer quality over quantity.`;
+
+export function buildAutopilotPrompt(context: {
+  pinTitle: string;
+  pinDescription: string;
+  pinScore: number;
+  recentArticleTitles: string[];
+}): string {
+  const recentList = context.recentArticleTitles.length > 0
+    ? context.recentArticleTitles.map((t) => `- ${t}`).join("\n")
+    : "- (no recent articles)";
+
+  return `${AUTOPILOT_EVALUATION_PROMPT}
+
+## Pin to evaluate:
+- Title: "${context.pinTitle}"
+- Description: "${context.pinDescription || "No description"}"
+- Trend Score: ${context.pinScore}/100
+
+## Recent articles already on the site:
+${recentList}
+
+Return ONLY valid JSON, no markdown code fences.`;
+}
+
 export function buildContentPrompt(keyword: string): string {
   return `${CONTENT_GENERATION_PROMPT}
 
