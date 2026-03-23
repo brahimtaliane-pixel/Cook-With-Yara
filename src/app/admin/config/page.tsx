@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,7 +49,6 @@ function ConfigPageInner() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [savingBoard, setSavingBoard] = useState(false);
 
-  // Pinterest app credentials (local form state)
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [savingCreds, setSavingCreds] = useState(false);
@@ -81,7 +80,6 @@ function ConfigPageInner() {
     fetchPinterestStatus();
   }, [fetchPinterestStatus]);
 
-  // Show message based on URL params from OAuth redirect
   useEffect(() => {
     const pinterestParam = searchParams.get("pinterest");
     if (pinterestParam === "connected") {
@@ -99,6 +97,10 @@ function ConfigPageInner() {
       window.history.replaceState({}, "", "/admin/config");
     }
   }, [searchParams, fetchPinterestStatus]);
+
+  function updateConfig(key: string, value: string) {
+    setConfig((prev) => ({ ...prev, [key]: value }));
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -195,30 +197,49 @@ function ConfigPageInner() {
   }
 
   const pipelineEnabled = config[ConfigKeys.PIPELINE_ENABLED] === "true";
+  const autopilotEnabled = config[ConfigKeys.AUTOPILOT_ENABLED] === "true";
+  const pinterestMode = config[ConfigKeys.PINTEREST_MODE] ?? "api";
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold tracking-tight">Configuration</h1>
 
+      {/* Pipeline Master Switch */}
       <Card>
         <CardHeader>
-          <CardTitle>Pipeline Settings</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Pipeline
+            <Badge variant={pipelineEnabled ? "default" : "secondary"}>
+              {pipelineEnabled ? "Active" : "Off"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Master switch for the entire content pipeline. When off, all crons stop processing.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="pipeline-toggle">Pipeline Enabled</Label>
+        <CardContent>
+          <div className="flex items-center gap-3">
             <Switch
               id="pipeline-toggle"
               checked={pipelineEnabled}
               onCheckedChange={(checked: boolean) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  [ConfigKeys.PIPELINE_ENABLED]: String(checked),
-                }))
+                updateConfig(ConfigKeys.PIPELINE_ENABLED, String(checked))
               }
             />
+            <Label htmlFor="pipeline-toggle">Enable Pipeline</Label>
           </div>
+        </CardContent>
+      </Card>
 
+      {/* Article Production */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Article Production</CardTitle>
+          <CardDescription>
+            Controls how many articles get written and published per day
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="max-articles">Max Articles Per Day</Label>
             <Input
@@ -227,13 +248,11 @@ function ConfigPageInner() {
               min={1}
               max={50}
               value={config[ConfigKeys.MAX_ARTICLES_PER_DAY] ?? "5"}
-              onChange={(e) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  [ConfigKeys.MAX_ARTICLES_PER_DAY]: e.target.value,
-                }))
-              }
+              onChange={(e) => updateConfig(ConfigKeys.MAX_ARTICLES_PER_DAY, e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Limits how many new articles can be created per day (applies to both auto-pilot and keyword approval). Each article uses ~$0.15 in AI costs.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -241,35 +260,169 @@ function ConfigPageInner() {
             <Input
               id="target-region"
               value={config[ConfigKeys.TARGET_REGION] ?? "US"}
-              onChange={(e) =>
-                setConfig((prev) => ({
-                  ...prev,
-                  [ConfigKeys.TARGET_REGION]: e.target.value,
-                }))
-              }
+              onChange={(e) => updateConfig(ConfigKeys.TARGET_REGION, e.target.value)}
             />
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-            {message && (
-              <p className="text-sm text-muted-foreground">{message}</p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              Region for keyword discovery (e.g. US, UK, CA)
+            </p>
           </div>
         </CardContent>
       </Card>
+
+      {/* Auto-Pilot */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Auto-Pilot
+            <Badge variant={autopilotEnabled ? "default" : "secondary"}>
+              {autopilotEnabled ? "Active" : "Off"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Automatically selects trending Pinterest pins and creates articles. Runs 3x/day.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="autopilot-toggle"
+              checked={autopilotEnabled}
+              onCheckedChange={(checked: boolean) =>
+                updateConfig(ConfigKeys.AUTOPILOT_ENABLED, String(checked))
+              }
+            />
+            <Label htmlFor="autopilot-toggle">Enable Auto-Pilot</Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="autopilot-score">Minimum Trend Score (0-100)</Label>
+            <Input
+              id="autopilot-score"
+              type="number"
+              min={0}
+              max={100}
+              value={config[ConfigKeys.AUTOPILOT_MIN_SCORE] ?? "65"}
+              onChange={(e) => updateConfig(ConfigKeys.AUTOPILOT_MIN_SCORE, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              85+ = Must Write, 65-84 = Strong, 45-64 = Promising. Higher = fewer but stronger picks.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="autopilot-max">Max Pins Per Run</Label>
+            <Input
+              id="autopilot-max"
+              type="number"
+              min={1}
+              max={10}
+              value={config[ConfigKeys.AUTOPILOT_MAX_PER_RUN] ?? "2"}
+              onChange={(e) => updateConfig(ConfigKeys.AUTOPILOT_MAX_PER_RUN, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              How many pins to select per auto-pilot run (3 runs/day). E.g. 2 per run = up to 6 articles/day.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pinterest Posting */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Pinterest Posting
+            <Badge variant={pinterestMode === "direct" ? "secondary" : "default"}>
+              {pinterestMode === "direct" ? "Direct HTTP" : "API"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Controls how pins get posted — via official API or direct session cookie
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="pins-per-day">Max Pins Per Day</Label>
+            <Input
+              id="pins-per-day"
+              type="number"
+              min={1}
+              max={100}
+              value={config[ConfigKeys.MAX_PINS_PER_DAY] ?? "40"}
+              onChange={(e) => updateConfig(ConfigKeys.MAX_PINS_PER_DAY, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Total pins posted per day. 2 pin designs per article, so 20 articles = 40 pins.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="pins-per-run">Pins Per Cron Run</Label>
+            <Input
+              id="pins-per-run"
+              type="number"
+              min={1}
+              max={10}
+              value={config[ConfigKeys.PINS_PER_CRON_RUN] ?? "1"}
+              onChange={(e) => updateConfig(ConfigKeys.PINS_PER_CRON_RUN, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              How many pins to post each cron run (every 15 min). 1 = safe &amp; natural, 3 = faster throughput.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="pinterest-mode">Posting Mode</Label>
+            <select
+              id="pinterest-mode"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              value={pinterestMode}
+              onChange={(e) => updateConfig(ConfigKeys.PINTEREST_MODE, e.target.value)}
+            >
+              <option value="api">API (Official — requires approved app)</option>
+              <option value="direct">Direct HTTP (Session cookie — no app needed)</option>
+            </select>
+          </div>
+
+          {pinterestMode === "direct" && (
+            <div className="space-y-2">
+              <Label htmlFor="pinterest-cookie">Session Cookie</Label>
+              <textarea
+                id="pinterest-cookie"
+                className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono"
+                placeholder="_pinterest_sess=YOUR_VALUE; csrftoken=YOUR_VALUE"
+                value={config[ConfigKeys.PINTEREST_SESSION_COOKIE] ?? ""}
+                onChange={(e) => updateConfig(ConfigKeys.PINTEREST_SESSION_COOKIE, e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Get from browser DevTools → Application → Cookies → pinterest.com. Paste the full cookie string.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Save Button */}
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save All Settings"}
+        </Button>
+        {message && (
+          <p className="text-sm text-muted-foreground">{message}</p>
+        )}
+      </div>
 
       {/* Pinterest OAuth Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            Pinterest
+            Pinterest Account
             {pinterest?.connected && (
               <Badge variant="default">Connected</Badge>
             )}
           </CardTitle>
+          <CardDescription>
+            Connect your Pinterest account for API mode posting
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
           {pinterestLoading ? (
@@ -278,7 +431,6 @@ function ConfigPageInner() {
             </p>
           ) : pinterest?.connected ? (
             <>
-              {/* Connected state */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Account:</span>
@@ -294,7 +446,6 @@ function ConfigPageInner() {
                   </div>
                 )}
 
-                {/* Board selection */}
                 {pinterest.boards.length > 0 && (
                   <div className="space-y-2">
                     <Label htmlFor="board-select">Board</Label>
@@ -326,7 +477,6 @@ function ConfigPageInner() {
             </>
           ) : (
             <>
-              {/* Setup: App credentials + Connect */}
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
                   Enter your Pinterest API credentials from the{" "}
