@@ -67,6 +67,14 @@ export const ConfigKeys = {
   PINTEREST_SESSION_COOKIE: "pinterest_session_cookie",
   PINS_PER_CRON_RUN: "pins_per_cron_run",
   MAX_PINS_PER_DAY: "max_pins_per_day",
+  PINTEREST_BOARD_MAP: "pinterest_board_map",
+  PIN_POSTING_SCHEDULE: "pin_posting_schedule",
+  MULTI_BOARD_ENABLED: "multi_board_enabled",
+  MAX_MULTIBOARD_PINS_PER_DAY: "max_multiboard_pins_per_day",
+  RECYCLE_ENABLED: "recycle_enabled",
+  MAX_RECYCLES_PER_ARTICLE: "max_recycles_per_article",
+  RECYCLE_COOLDOWN_DAYS: "recycle_cooldown_days",
+  MAX_RECYCLED_PINS_PER_DAY: "max_recycled_pins_per_day",
 } as const;
 
 // === Intel ===

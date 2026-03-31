@@ -169,6 +169,12 @@ export function PinCard({ pin, compact = false, maxVelocity = 0 }: PinCardProps)
                   In Pipeline
                 </Badge>
               )}
+              {!pin.sentToPipeline && pin.existingArticleStatus && (
+                <Badge variant="secondary" className="text-xs text-amber-700 dark:text-amber-400">
+                  <Check className="size-3" />
+                  Already Written
+                </Badge>
+              )}
             </div>
             {!compact && pin.competitorUsername && (
               <p className="text-xs text-muted-foreground">
@@ -231,10 +237,25 @@ export function PinCard({ pin, compact = false, maxVelocity = 0 }: PinCardProps)
             <span>{daysAgo(pin.pinCreatedAt)}</span>
           </div>
           {!compact && (
-            <SendToPipelineButton
-              pinId={pin.id}
-              initialSent={pin.sentToPipeline}
-            />
+            pin.existingArticleStatus && !pin.sentToPipeline ? (
+              pin.existingArticleUrl ? (
+                <a
+                  href={pin.existingArticleUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-amber-600 hover:text-amber-700 underline"
+                >
+                  View Article
+                </a>
+              ) : (
+                <span className="text-xs text-muted-foreground">Written</span>
+              )
+            ) : (
+              <SendToPipelineButton
+                pinId={pin.id}
+                initialSent={pin.sentToPipeline}
+              />
+            )
           )}
         </div>
       </CardContent>

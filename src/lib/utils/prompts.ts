@@ -214,6 +214,68 @@ ${recentList}
 Return ONLY valid JSON, no markdown code fences.`;
 }
 
+export const PINTEREST_COPY_PROMPT = `You are a Pinterest SEO expert optimizing recipe pins for maximum saves, clicks, and impressions.
+
+Return ONLY a JSON object (no markdown fences) with these fields:
+
+{
+  "pinterestTitle": "Pinterest-optimized title (max 100 chars)",
+  "pinterestDescription": "Pinterest-optimized description (max 450 chars, includes hashtags)",
+  "altText": "Visual description for accessibility + SEO (max 200 chars)"
+}
+
+## Pinterest Title Rules (max 100 chars):
+- Front-load the primary keyword in the first 40 chars
+- Use power words: Easy, Best, Perfect, Quick, Homemade, Delicious, Amazing, Ultimate
+- Include the recipe type or cooking method if space allows
+- Format: "[Power Word] [Recipe Name] - [Benefit or Descriptor]"
+- Example: "Easy Homemade Birria Tacos - Crispy, Juicy & Ready in 30 Minutes"
+
+## Pinterest Description Rules (max 450 chars):
+- Line 1: Hook — start with an attention-grabbing statement about the recipe
+- Line 2-3: Keywords — weave in 3-5 related search terms naturally (e.g. cooking method, cuisine, diet type, meal type)
+- Line 4: Sensory language — describe taste, texture, aroma
+- Line 5: CTA — "Save this recipe for later!" or "Tap to get the full recipe!"
+- Line 6: 3-5 hashtags — #RecipeName #CuisineType #MealType #CookingMethod #FoodCategory
+- Do NOT use line breaks — write as flowing text
+
+## Alt Text Rules (max 200 chars):
+- Describe what the food looks like visually
+- Include the dish name, key ingredients visible, plating style, and colors
+- Example: "Golden crispy birria tacos on a white plate with melted cheese, cilantro, and a side of rich red consomme"
+
+## Halal Compliance:
+- Never mention pork, bacon, ham, alcohol, wine, beer, or any haram ingredient
+- Use halal-friendly alternatives in descriptions`;
+
+export function buildPinterestCopyPrompt(context: {
+  title: string;
+  metaDescription: string;
+  keyword: string;
+  recipeCategory: string;
+  topIngredients: string[];
+  isRecycled?: boolean;
+}): string {
+  const ingredientsList = context.topIngredients.length > 0
+    ? context.topIngredients.join(", ")
+    : "not specified";
+
+  const recycleNote = context.isRecycled
+    ? `\n\nIMPORTANT: This is a RECYCLED pin for an existing article. Generate a DIFFERENT keyword angle than the original. Use different power words, emphasize different aspects of the recipe (e.g., if the original focused on "easy", focus on "healthy" or "family-friendly" or the cuisine type). The title and description should feel fresh — not a rewording of the original.`
+    : "";
+
+  return `${PINTEREST_COPY_PROMPT}${recycleNote}
+
+## Recipe Details:
+- Article Title: "${context.title}"
+- Meta Description: "${context.metaDescription}"
+- Target Keyword: "${context.keyword}"
+- Category: "${context.recipeCategory}"
+- Key Ingredients: ${ingredientsList}
+
+Return ONLY valid JSON, no markdown code fences.`;
+}
+
 export function buildContentPrompt(keyword: string): string {
   return `${CONTENT_GENERATION_PROMPT}
 

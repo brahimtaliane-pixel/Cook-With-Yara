@@ -8,6 +8,8 @@ import { generateArticleContent } from "@/lib/services/ai-writer";
 import { submitImagineJob, checkImagineJob } from "@/lib/services/imagineapi";
 import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
 import { getCanonicalUrl } from "@/lib/utils/seo";
+import { getBoardForArticle } from "@/lib/services/pinterest-boards";
+import { getNextPostingSlot } from "@/lib/pipeline/schedule";
 import { put } from "@vercel/blob";
 
 export const maxDuration = 300;
@@ -259,7 +261,13 @@ export async function POST(request: Request) {
           `${siteUrl}/api/revalidate?slug=${slug}&secret=${process.env.CRON_SECRET}`
         );
 
-        // Queue both pin designs for scheduled posting
+        // Determine target Pinterest board
+        const recipeCategory =
+          (content.recipeJsonLd as Record<string, unknown> | null)?.recipeCategory as string | undefined;
+        const boardId = await getBoardForArticle(content.title, recipeCategory);
+
+        // Queue both pin designs for scheduled posting at optimal times
+        const slot1 = await getNextPostingSlot();
         await db.insert(pinQueue).values({
           articleId: newArticle.id,
           imageUrl: blob1.url,
@@ -267,7 +275,10 @@ export async function POST(request: Request) {
           title: content.title,
           description: content.metaDescription,
           link: canonicalUrl,
+          boardId,
+          scheduledAt: slot1,
         });
+        const slot2 = await getNextPostingSlot({ afterSlot: slot1 });
         await db.insert(pinQueue).values({
           articleId: newArticle.id,
           imageUrl: blob2.url,
@@ -275,6 +286,8 @@ export async function POST(request: Request) {
           title: content.title,
           description: content.metaDescription,
           link: canonicalUrl,
+          boardId,
+          scheduledAt: slot2,
         });
 
         await db

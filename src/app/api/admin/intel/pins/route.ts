@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { intelPins, intelCompetitors } from "@/lib/db/schema";
+import { intelPins, intelCompetitors, articles } from "@/lib/db/schema";
 import { eq, desc, gte, and, isNotNull, count, type SQL } from "drizzle-orm";
 import { computePinScore } from "@/lib/services/intel-scoring";
+import { generateSlug } from "@/lib/utils/slug";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -117,6 +118,12 @@ export async function GET(request: Request) {
 
   const total = totalRow?.value ?? 0;
 
+  // Build a set of existing article slugs to detect duplicates
+  const existingArticles = await db
+    .select({ slug: articles.slug, status: articles.status, publishedUrl: articles.publishedUrl })
+    .from(articles);
+  const articlesBySlug = new Map(existingArticles.map((a) => [a.slug, a]));
+
   // Compute scores for each pin
   const scored = rows.map((row) => {
     const { score, tier, tierColor } = computePinScore({
@@ -130,11 +137,28 @@ export async function GET(request: Request) {
       title: row.title,
       description: row.description,
     });
-    return { ...row, trendScore: score, scoreTier: tier, scoreTierColor: tierColor };
+    const slug = generateSlug(row.title);
+    const existing = articlesBySlug.get(slug);
+    return {
+      ...row,
+      trendScore: score,
+      scoreTier: tier,
+      scoreTierColor: tierColor,
+      existingArticleStatus: existing?.status ?? null,
+      existingArticleUrl: existing?.publishedUrl ?? null,
+    };
   });
 
+  // Filter out pins already in pipeline, already written, or junk data
+  let filtered = scored.filter(
+    (p) =>
+      !p.sentToPipeline &&
+      !p.existingArticleStatus &&
+      p.title &&
+      p.title !== "Pinterest"
+  );
+
   // Apply min score filter
-  let filtered = scored;
   if (minScore) {
     const threshold = parseInt(minScore, 10);
     filtered = scored.filter((p) => p.trendScore >= threshold);

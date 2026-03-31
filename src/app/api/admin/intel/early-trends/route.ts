@@ -1,18 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { intelPins, intelCompetitors } from "@/lib/db/schema";
+import { intelPins, intelCompetitors, articles } from "@/lib/db/schema";
 import { eq, desc, gte, and, lt, type SQL } from "drizzle-orm";
 import { computePinScore } from "@/lib/services/intel-scoring";
+import { generateSlug } from "@/lib/utils/slug";
 
 export async function GET() {
-  const fourteenDaysAgo = new Date();
-  fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   const conditions: SQL[] = [
-    gte(intelPins.acceleration, 5),
-    lt(intelPins.saves, 500),
+    gte(intelPins.acceleration, 1),
     eq(intelPins.trendDirection, "rising"),
-    gte(intelPins.pinCreatedAt, fourteenDaysAgo),
+    gte(intelPins.pinCreatedAt, thirtyDaysAgo),
   ];
 
   const rows = await db
@@ -47,6 +47,12 @@ export async function GET() {
     .orderBy(desc(intelPins.acceleration))
     .limit(200);
 
+  // Build article slug map to detect duplicates
+  const existingArticles = await db
+    .select({ slug: articles.slug, status: articles.status, publishedUrl: articles.publishedUrl })
+    .from(articles);
+  const articlesBySlug = new Map(existingArticles.map((a) => [a.slug, a]));
+
   const scored = rows.map((row) => {
     const { score, tier, tierColor } = computePinScore({
       saves: row.saves,
@@ -59,17 +65,35 @@ export async function GET() {
       title: row.title,
       description: row.description,
     });
-    return { ...row, trendScore: score, scoreTier: tier, scoreTierColor: tierColor };
+    const slug = generateSlug(row.title);
+    const existing = articlesBySlug.get(slug);
+    return {
+      ...row,
+      trendScore: score,
+      scoreTier: tier,
+      scoreTierColor: tierColor,
+      existingArticleStatus: existing?.status ?? null,
+      existingArticleUrl: existing?.publishedUrl ?? null,
+    };
   });
 
-  // Sort by acceleration descending, take top 50
-  scored.sort((a, b) => b.acceleration - a.acceleration);
-  const top50 = scored.slice(0, 50);
+  // Filter out pins already in pipeline, already written, or junk
+  const fresh = scored.filter(
+    (p) =>
+      !p.sentToPipeline &&
+      !p.existingArticleStatus &&
+      p.title &&
+      p.title !== "Pinterest"
+  );
 
-  const totalRising = scored.length;
+  // Sort by acceleration descending, take top 50
+  fresh.sort((a, b) => b.acceleration - a.acceleration);
+  const top50 = fresh.slice(0, 50);
+
+  const totalRising = fresh.length;
   const avgAcceleration =
     totalRising > 0
-      ? Math.round(scored.reduce((sum, p) => sum + p.acceleration, 0) / totalRising)
+      ? Math.round(fresh.reduce((sum, p) => sum + p.acceleration, 0) / totalRising)
       : 0;
   const topAccelerating = top50[0] ?? null;
 

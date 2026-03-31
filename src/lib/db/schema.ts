@@ -43,6 +43,8 @@ export const articles = pgTable("articles", {
   pinterestPinId: text("pinterest_pin_id"),
   publishedUrl: text("published_url"),
   publishedAt: timestamp("published_at"),
+  recycleCount: integer("recycle_count").default(0).notNull(),
+  lastRecycledAt: timestamp("last_recycled_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -154,8 +156,27 @@ export const pinQueue = pgTable("pin_queue", {
   postedAt: timestamp("posted_at"),
   pinterestPinId: text("pinterest_pin_id"),
   failureReason: text("failure_reason"),
+  boardId: text("board_id"),
   retryCount: integer("retry_count").default(0).notNull(),
+  altText: text("alt_text"),
+  pinType: text("pin_type").default("original").notNull(),
+  performanceScore: integer("performance_score"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// === Pin Analytics ===
+
+export const pinAnalytics = pgTable("pin_analytics", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  pinQueueId: uuid("pin_queue_id")
+    .references(() => pinQueue.id)
+    .notNull(),
+  pinterestPinId: text("pinterest_pin_id").notNull(),
+  impressions: integer("impressions").default(0).notNull(),
+  saves: integer("saves").default(0).notNull(),
+  clicks: integer("clicks").default(0).notNull(),
+  closeups: integer("closeups").default(0).notNull(),
+  snapshotAt: timestamp("snapshot_at").defaultNow().notNull(),
 });
 
 // Type exports
@@ -175,3 +196,5 @@ export type AutopilotDecision = typeof autopilotDecisions.$inferSelect;
 export type NewAutopilotDecision = typeof autopilotDecisions.$inferInsert;
 export type PinQueueItem = typeof pinQueue.$inferSelect;
 export type NewPinQueueItem = typeof pinQueue.$inferInsert;
+export type PinAnalyticsRow = typeof pinAnalytics.$inferSelect;
+export type NewPinAnalyticsRow = typeof pinAnalytics.$inferInsert;

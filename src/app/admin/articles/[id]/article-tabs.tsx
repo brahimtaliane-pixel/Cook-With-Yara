@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Copy, Check, Download, ExternalLink, Loader2 } from "lucide-react";
+import { Copy, Check, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 
 interface ArticleTabsProps {
   article: {
@@ -170,6 +170,223 @@ function PostToPinterestButton({ articleId }: { articleId: string }) {
   );
 }
 
+// === Pin Activity ===
+
+interface PinEntry {
+  id: string;
+  pinDesign: number;
+  title: string;
+  description: string;
+  imageUrl: string;
+  altText: string | null;
+  pinType: string;
+  status: string;
+  boardId: string | null;
+  scheduledAt: string;
+  postedAt: string | null;
+  pinterestPinId: string | null;
+  performanceScore: number | null;
+  failureReason: string | null;
+  analytics: {
+    impressions: number;
+    saves: number;
+    clicks: number;
+    closeups: number;
+    snapshotAt: string;
+  } | null;
+}
+
+const PIN_TYPE_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "outline" }> = {
+  original: { label: "Original", variant: "default" },
+  multiboard: { label: "Multi-Board", variant: "secondary" },
+  recycled: { label: "Recycled", variant: "outline" },
+};
+
+const PIN_STATUS_COLORS: Record<string, string> = {
+  pending: "text-amber-600",
+  posting: "text-blue-600",
+  posted: "text-green-600",
+  failed: "text-red-600",
+};
+
+const DESIGN_NAMES: Record<number, string> = {
+  1: "Title Band",
+  2: "Full-Bleed",
+  3: "Bold Overlay",
+  4: "Card Style",
+  5: "Minimal",
+};
+
+function PinActivity({ articleId }: { articleId: string }) {
+  const [pins, setPins] = useState<PinEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/admin/articles/${articleId}/pins`)
+      .then((r) => r.json())
+      .then((data: { pins: PinEntry[] }) => {
+        setPins(data.pins);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [articleId]);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground py-4">Loading pin activity...</p>;
+  }
+
+  if (pins.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <p className="text-sm text-muted-foreground">No pins queued for this article yet.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const posted = pins.filter((p) => p.status === "posted");
+  const pending = pins.filter((p) => p.status === "pending");
+  const failed = pins.filter((p) => p.status === "failed");
+
+  return (
+    <div className="space-y-4">
+      {/* Summary bar */}
+      <div className="flex flex-wrap gap-3 text-sm">
+        <span className="font-medium">{pins.length} total pins</span>
+        {posted.length > 0 && <Badge variant="default">{posted.length} posted</Badge>}
+        {pending.length > 0 && <Badge variant="secondary">{pending.length} queued</Badge>}
+        {failed.length > 0 && <Badge variant="destructive">{failed.length} failed</Badge>}
+      </div>
+
+      {/* Pin list */}
+      <div className="rounded-lg border divide-y">
+        {pins.map((pin) => {
+          const typeInfo = PIN_TYPE_LABELS[pin.pinType] ?? PIN_TYPE_LABELS.original;
+          const isExpanded = expanded === pin.id;
+
+          return (
+            <div key={pin.id} className="text-sm">
+              {/* Row summary */}
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
+                onClick={() => setExpanded(isExpanded ? null : pin.id)}
+              >
+                {/* Pin image thumbnail */}
+                <div className="w-8 h-12 rounded overflow-hidden border shrink-0 bg-muted">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={pin.imageUrl}
+                    alt=""
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+
+                {/* Info */}
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={typeInfo.variant} className="text-[10px] px-1.5 py-0">
+                      {typeInfo.label}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Design {pin.pinDesign} ({DESIGN_NAMES[pin.pinDesign] ?? "Custom"})
+                    </span>
+                  </div>
+                  <p className="truncate font-medium">{pin.title}</p>
+                </div>
+
+                {/* Status + score */}
+                <div className="text-right shrink-0 space-y-0.5">
+                  <p className={`text-xs font-medium capitalize ${PIN_STATUS_COLORS[pin.status] ?? ""}`}>
+                    {pin.status}
+                  </p>
+                  {pin.status === "posted" && pin.analytics && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {pin.analytics.saves} saves
+                    </p>
+                  )}
+                  {pin.status === "pending" && (
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(pin.scheduledAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </p>
+                  )}
+                </div>
+              </button>
+
+              {/* Expanded detail */}
+              {isExpanded && (
+                <div className="px-4 pb-4 pt-1 space-y-3 bg-muted/30">
+                  {/* Pinterest-optimized copy */}
+                  <div className="space-y-2">
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Pinterest Title</p>
+                      <p className="text-sm">{pin.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{pin.title.length} chars</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Pinterest Description</p>
+                      <p className="text-sm whitespace-pre-wrap">{pin.description}</p>
+                      <p className="text-[10px] text-muted-foreground">{pin.description.length} chars</p>
+                    </div>
+                    {pin.altText && (
+                      <div>
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Alt Text</p>
+                        <p className="text-sm">{pin.altText}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Metadata */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                    <div><span className="text-muted-foreground">Board ID:</span> <span className="font-mono">{pin.boardId ?? "default"}</span></div>
+                    <div><span className="text-muted-foreground">Pin Type:</span> {pin.pinType}</div>
+                    <div><span className="text-muted-foreground">Scheduled:</span> {new Date(pin.scheduledAt).toLocaleString()}</div>
+                    {pin.postedAt && <div><span className="text-muted-foreground">Posted:</span> {new Date(pin.postedAt).toLocaleString()}</div>}
+                    {pin.pinterestPinId && <div><span className="text-muted-foreground">Pinterest ID:</span> <span className="font-mono">{pin.pinterestPinId}</span></div>}
+                    {pin.failureReason && <div className="col-span-2 text-red-600"><span className="text-muted-foreground">Error:</span> {pin.failureReason}</div>}
+                  </div>
+
+                  {/* Analytics */}
+                  {pin.analytics && (
+                    <div className="rounded-md border bg-background p-3 space-y-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Performance</p>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <div>
+                          <p className="text-lg font-semibold">{pin.analytics.impressions.toLocaleString()}</p>
+                          <p className="text-[10px] text-muted-foreground">Impressions</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-semibold text-green-600">{pin.analytics.saves}</p>
+                          <p className="text-[10px] text-muted-foreground">Saves</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-semibold text-blue-600">{pin.analytics.clicks}</p>
+                          <p className="text-[10px] text-muted-foreground">Clicks</p>
+                        </div>
+                        <div>
+                          <p className="text-lg font-semibold">{pin.analytics.closeups}</p>
+                          <p className="text-[10px] text-muted-foreground">Closeups</p>
+                        </div>
+                      </div>
+                      {pin.performanceScore !== null && (
+                        <p className="text-[10px] text-muted-foreground text-right">
+                          Score: {pin.performanceScore}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
   return (
     <Tabs defaultValue="content">
@@ -290,6 +507,9 @@ export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
 
       {/* Pinterest Tab */}
       <TabsContent value="pinterest" className="space-y-4 pt-4">
+        {/* Pin Activity — all pins queued/posted for this article */}
+        <PinActivity articleId={article.id} />
+
         {/* Post to Pinterest via API */}
         {!article.pinterestPinId && (article.pinImageUrl || article.pinImageUrl2) && (
           <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20">

@@ -1,8 +1,8 @@
+"use client";
+
 import Link from "next/link";
-import { db } from "@/lib/db";
-import { articles, keywords, pipelineRuns, pinQueue } from "@/lib/db/schema";
-import { eq, count, desc, gte, and, sql } from "drizzle-orm";
-import { ArticleStatus, KeywordStatus, PipelineRunStatus } from "@/lib/constants";
+import { useEffect, useState } from "react";
+import { PipelineRunStatus } from "@/lib/constants";
 import {
   Card,
   CardContent,
@@ -12,80 +12,84 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export const dynamic = "force-dynamic";
-
-export default async function AdminOverviewPage() {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const [
-    // All-time counts
-    [totalArticlesRow],
-    [publishedRow],
-    [draftRow],
-    [failedArticlesRow],
-    [totalKeywordsRow],
-    // Today counts
-    [articlesPublishedTodayRow],
-    [articlesCreatedTodayRow],
-    [pinsPostedTodayRow],
-    [pinsPendingRow],
-    [pinsFailedRow],
-    // Pipeline in-progress
-    inProgressRows,
-    // Recent runs
-    recentRuns,
-    // Today's pipeline runs summary
-    todayRunsSummary,
-  ] = await Promise.all([
-    // All-time
-    db.select({ value: count() }).from(articles),
-    db.select({ value: count() }).from(articles).where(eq(articles.status, ArticleStatus.PUBLISHED)),
-    db.select({ value: count() }).from(articles).where(eq(articles.status, ArticleStatus.DRAFT)),
-    db.select({ value: count() }).from(articles).where(eq(articles.status, ArticleStatus.FAILED)),
-    db.select({ value: count() }).from(keywords),
-    // Today
-    db.select({ value: count() }).from(articles).where(
-      and(eq(articles.status, ArticleStatus.PUBLISHED), gte(articles.publishedAt, todayStart))
-    ),
-    db.select({ value: count() }).from(articles).where(gte(articles.createdAt, todayStart)),
-    db.select({ value: count() }).from(pinQueue).where(
-      and(eq(pinQueue.status, "posted"), gte(pinQueue.postedAt, todayStart))
-    ),
-    db.select({ value: count() }).from(pinQueue).where(eq(pinQueue.status, "pending")),
-    db.select({ value: count() }).from(pinQueue).where(eq(pinQueue.status, "failed")),
-    // In-progress articles (stuck detection)
-    db
-      .select({ status: articles.status, value: sql<number>`count(*)::int` })
-      .from(articles)
-      .where(
-        sql`${articles.status} IN ('content_generating', 'image_generating', 'pin_generating', 'publishing', 'content_ready', 'image_ready', 'pin_ready')`
-      )
-      .groupBy(articles.status),
-    // Recent pipeline runs
-    db.select().from(pipelineRuns).orderBy(desc(pipelineRuns.startedAt)).limit(10),
-    // Today's pipeline run stats
-    db
-      .select({
-        jobName: pipelineRuns.jobName,
-        runs: sql<number>`count(*)::int`,
-        processed: sql<number>`coalesce(sum(${pipelineRuns.itemsProcessed}), 0)::int`,
-        failures: sql<number>`count(*) filter (where ${pipelineRuns.status} = 'failed')::int`,
-      })
-      .from(pipelineRuns)
-      .where(gte(pipelineRuns.startedAt, todayStart))
-      .groupBy(pipelineRuns.jobName),
-  ]);
-
-  const STATUS_LABELS: Record<string, string> = {
-    content_generating: "Writing content",
-    content_ready: "Content ready",
-    image_generating: "Generating images",
-    image_ready: "Images ready",
-    pin_generating: "Creating pins",
-    pin_ready: "Pins ready",
-    publishing: "Publishing",
+interface DashboardData {
+  today: {
+    articlesPublished: number;
+    articlesCreated: number;
+    pinsPosted: number;
+    pinsPending: number;
+    pinsFailed: number;
+    pinsByType: {
+      original: number;
+      multiboard: number;
+      recycled: number;
+    };
   };
+  allTime: {
+    totalArticles: number;
+    published: number;
+    drafts: number;
+    failed: number;
+    keywords: number;
+    totalPinsPosted: number;
+  };
+  inProgress: { status: string; value: number }[];
+  recentRuns: {
+    id: string;
+    jobName: string;
+    startedAt: string;
+    finishedAt: string | null;
+    status: string;
+    itemsProcessed: number;
+    errorLog: string | null;
+  }[];
+  todayRunsSummary: {
+    jobName: string;
+    runs: number;
+    processed: number;
+    failures: number;
+  }[];
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  content_generating: "Writing content",
+  content_ready: "Content ready",
+  image_generating: "Generating images",
+  image_ready: "Images ready",
+  pin_generating: "Creating pins",
+  pin_ready: "Pins ready",
+  publishing: "Publishing",
+};
+
+export default function AdminOverviewPage() {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch("/api/admin/stats")
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
+      .then((d: DashboardData) => setData(d))
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-sm text-red-500">Failed to load dashboard: {error}</p>
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <p className="text-muted-foreground">Loading dashboard...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -101,7 +105,7 @@ export default async function AdminOverviewPage() {
             <CardHeader>
               <CardDescription>Articles Published Today</CardDescription>
               <CardTitle className="text-3xl text-green-600">
-                {articlesPublishedTodayRow?.value ?? 0}
+                {data.today.articlesPublished}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -109,7 +113,7 @@ export default async function AdminOverviewPage() {
             <CardHeader>
               <CardDescription>Articles Created Today</CardDescription>
               <CardTitle className="text-3xl">
-                {articlesCreatedTodayRow?.value ?? 0}
+                {data.today.articlesCreated}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -117,18 +121,37 @@ export default async function AdminOverviewPage() {
             <CardHeader>
               <CardDescription>Pins Posted Today</CardDescription>
               <CardTitle className="text-3xl text-blue-600">
-                {pinsPostedTodayRow?.value ?? 0}
+                {data.today.pinsPosted}
               </CardTitle>
+              {data.today.pinsPosted > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {data.today.pinsByType.original > 0 && (
+                    <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                      {data.today.pinsByType.original} original
+                    </Badge>
+                  )}
+                  {data.today.pinsByType.multiboard > 0 && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      {data.today.pinsByType.multiboard} multi-board
+                    </Badge>
+                  )}
+                  {data.today.pinsByType.recycled > 0 && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                      {data.today.pinsByType.recycled} recycled
+                    </Badge>
+                  )}
+                </div>
+              )}
             </CardHeader>
           </Card>
           <Card size="sm">
             <CardHeader>
               <CardDescription>Pins Queued</CardDescription>
               <CardTitle className="text-3xl text-amber-600">
-                {pinsPendingRow?.value ?? 0}
-                {(pinsFailedRow?.value ?? 0) > 0 && (
+                {data.today.pinsPending}
+                {data.today.pinsFailed > 0 && (
                   <span className="ml-2 text-base text-red-500">
-                    ({pinsFailedRow?.value} failed)
+                    ({data.today.pinsFailed} failed)
                   </span>
                 )}
               </CardTitle>
@@ -142,13 +165,13 @@ export default async function AdminOverviewPage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
           All Time
         </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <Link href="/admin/articles">
             <Card size="sm" className="transition-colors hover:bg-muted/50">
               <CardHeader>
                 <CardDescription>Total Articles</CardDescription>
                 <CardTitle className="text-2xl">
-                  {totalArticlesRow?.value ?? 0}
+                  {data.allTime.totalArticles}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -158,7 +181,7 @@ export default async function AdminOverviewPage() {
               <CardHeader>
                 <CardDescription>Published</CardDescription>
                 <CardTitle className="text-2xl text-green-600">
-                  {publishedRow?.value ?? 0}
+                  {data.allTime.published}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -168,7 +191,7 @@ export default async function AdminOverviewPage() {
               <CardHeader>
                 <CardDescription>Drafts</CardDescription>
                 <CardTitle className="text-2xl">
-                  {draftRow?.value ?? 0}
+                  {data.allTime.drafts}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -178,7 +201,7 @@ export default async function AdminOverviewPage() {
               <CardHeader>
                 <CardDescription>Failed</CardDescription>
                 <CardTitle className="text-2xl text-red-600">
-                  {failedArticlesRow?.value ?? 0}
+                  {data.allTime.failed}
                 </CardTitle>
               </CardHeader>
             </Card>
@@ -188,16 +211,24 @@ export default async function AdminOverviewPage() {
               <CardHeader>
                 <CardDescription>Keywords</CardDescription>
                 <CardTitle className="text-2xl">
-                  {totalKeywordsRow?.value ?? 0}
+                  {data.allTime.keywords}
                 </CardTitle>
               </CardHeader>
             </Card>
           </Link>
+          <Card size="sm">
+            <CardHeader>
+              <CardDescription>Total Pins Posted</CardDescription>
+              <CardTitle className="text-2xl text-blue-600">
+                {data.allTime.totalPinsPosted}
+              </CardTitle>
+            </CardHeader>
+          </Card>
         </div>
       </div>
 
       {/* Pipeline Status */}
-      {inProgressRows.length > 0 && (
+      {data.inProgress.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Pipeline In Progress</CardTitle>
@@ -205,7 +236,7 @@ export default async function AdminOverviewPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-3">
-              {inProgressRows.map((row) => (
+              {data.inProgress.map((row) => (
                 <div
                   key={row.status}
                   className="flex items-center gap-2 rounded-md border px-3 py-2"
@@ -222,7 +253,7 @@ export default async function AdminOverviewPage() {
       )}
 
       {/* Today's Pipeline Activity */}
-      {todayRunsSummary.length > 0 && (
+      {data.todayRunsSummary.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Today&apos;s Pipeline Activity</CardTitle>
@@ -240,7 +271,7 @@ export default async function AdminOverviewPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {todayRunsSummary.map((row) => (
+                  {data.todayRunsSummary.map((row) => (
                     <tr key={row.jobName} className="border-b last:border-0">
                       <td className="px-4 py-2 font-medium">{row.jobName}</td>
                       <td className="px-4 py-2 text-right">{row.runs}</td>
@@ -267,11 +298,11 @@ export default async function AdminOverviewPage() {
           <CardTitle>Recent Pipeline Runs</CardTitle>
         </CardHeader>
         <CardContent>
-          {recentRuns.length === 0 ? (
+          {data.recentRuns.length === 0 ? (
             <p className="text-sm text-muted-foreground">No runs yet.</p>
           ) : (
             <div className="space-y-2">
-              {recentRuns.map((run) => (
+              {data.recentRuns.map((run) => (
                 <div
                   key={run.id}
                   className="flex items-center justify-between rounded-md border p-3"

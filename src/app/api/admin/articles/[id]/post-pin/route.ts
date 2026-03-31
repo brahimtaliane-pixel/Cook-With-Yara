@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { articles } from "@/lib/db/schema";
+import { articles, pinQueue, keywords } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { createPin, getPinterestBoardId } from "@/lib/services/pinterest";
+import { getBoardForArticle } from "@/lib/services/pinterest-boards";
+import { getNextPostingSlot } from "@/lib/pipeline/schedule";
+import { getCanonicalUrl } from "@/lib/utils/seo";
+import { generatePinterestCopy } from "@/lib/services/pinterest-copy";
 
 export async function POST(
   _request: Request,
@@ -10,7 +13,6 @@ export async function POST(
 ) {
   const { id } = await params;
 
-  // Fetch the article
   const [article] = await db
     .select()
     .from(articles)
@@ -21,46 +23,98 @@ export async function POST(
     return NextResponse.json({ error: "Article not found" }, { status: 404 });
   }
 
-  if (article.pinterestPinId) {
-    return NextResponse.json(
-      { error: "Pin already posted", pinId: article.pinterestPinId },
-      { status: 409 },
-    );
-  }
-
-  const imageUrl = article.pinImageUrl || article.pinImageUrl2;
-  if (!imageUrl) {
+  if (!article.pinImageUrl && !article.pinImageUrl2) {
     return NextResponse.json(
       { error: "No pin image available" },
       { status: 400 },
     );
   }
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://cookwithlucia.com";
-  const link = article.publishedUrl || `${siteUrl}/recipes/${article.slug}`;
+  const link = article.publishedUrl || getCanonicalUrl(article.slug);
+  const recipeJsonLd = article.recipeJsonLd as Record<string, unknown> | null;
+  const recipeCategory = (recipeJsonLd?.recipeCategory as string) ?? "";
+  const topIngredients = Array.isArray(recipeJsonLd?.recipeIngredient)
+    ? (recipeJsonLd.recipeIngredient as string[]).slice(0, 6)
+    : [];
+  const boardId = await getBoardForArticle(article.title || article.slug, recipeCategory);
+
+  // Look up keyword
+  let keywordText = "";
+  if (article.keywordId) {
+    const [kw] = await db
+      .select({ keyword: keywords.keyword })
+      .from(keywords)
+      .where(eq(keywords.id, article.keywordId))
+      .limit(1);
+    keywordText = kw?.keyword ?? "";
+  }
+
+  // Generate Pinterest-optimized copy
+  let pinTitle = article.title || article.slug;
+  let pinDescription = article.metaDescription || "";
+  let altText: string | undefined;
 
   try {
-    const boardId = await getPinterestBoardId();
-
-    const pin = await createPin({
-      boardId,
-      title: article.title || article.slug,
-      description: article.metaDescription || "",
-      imageUrl,
-      link,
+    const copy = await generatePinterestCopy({
+      title: article.title || "",
+      metaDescription: article.metaDescription || "",
+      keyword: keywordText,
+      recipeCategory,
+      topIngredients,
     });
+    pinTitle = copy.pinterestTitle;
+    pinDescription = copy.pinterestDescription;
+    altText = copy.altText;
+  } catch (err) {
+    console.error("[post-pin] Pinterest copy generation failed, using SEO defaults:", err);
+  }
 
-    // Update article with pin ID
-    await db
-      .update(articles)
-      .set({ pinterestPinId: pin.id, updatedAt: new Date() })
-      .where(eq(articles.id, id));
+  try {
+    const slot1 = await getNextPostingSlot();
+    let queued = 0;
 
-    return NextResponse.json({ success: true, pinId: pin.id });
+    if (article.pinImageUrl) {
+      await db.insert(pinQueue).values({
+        articleId: article.id,
+        imageUrl: article.pinImageUrl,
+        pinDesign: 1,
+        title: pinTitle,
+        description: pinDescription,
+        link,
+        boardId,
+        altText,
+        pinType: "original",
+        scheduledAt: slot1,
+      });
+      queued++;
+    }
+
+    if (article.pinImageUrl2) {
+      const slot2 = await getNextPostingSlot({ afterSlot: slot1 });
+      await db.insert(pinQueue).values({
+        articleId: article.id,
+        imageUrl: article.pinImageUrl2,
+        pinDesign: 2,
+        title: pinTitle,
+        description: pinDescription,
+        link,
+        boardId,
+        altText,
+        pinType: "original",
+        scheduledAt: slot2,
+      });
+      queued++;
+    }
+
+    return NextResponse.json({
+      success: true,
+      queued,
+      scheduledAt: slot1.toISOString(),
+    });
   } catch (error) {
-    console.error("Failed to post pin:", error);
+    console.error("Failed to queue pin:", error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to post pin" },
+      { error: error instanceof Error ? error.message : "Failed to queue pin" },
       { status: 500 },
     );
   }

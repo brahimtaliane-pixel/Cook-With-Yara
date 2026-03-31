@@ -69,6 +69,8 @@ export interface PinData {
   trendScore?: number;
   scoreTier?: string;
   scoreTierColor?: string;
+  existingArticleStatus?: string | null;
+  existingArticleUrl?: string | null;
 }
 
 interface IntelTabsProps {

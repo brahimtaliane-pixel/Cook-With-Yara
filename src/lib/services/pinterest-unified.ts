@@ -34,6 +34,7 @@ export async function postPin(params: CreatePinParams): Promise<PostPinResult> {
         description: params.description,
         imageUrl: params.imageUrl,
         link: params.link,
+        altText: params.altText,
       },
       sessionCookie,
     );

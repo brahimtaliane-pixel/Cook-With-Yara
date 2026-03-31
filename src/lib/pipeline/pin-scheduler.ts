@@ -6,6 +6,32 @@ import { getConfigValue, shouldRetry } from "@/lib/pipeline/base";
 import { ConfigKeys } from "@/lib/constants";
 import { eq, and, sql, lte, gte } from "drizzle-orm";
 
+const DEFAULT_POSTING_SCHEDULE = {
+  timezone: "America/New_York",
+  hours: [8, 12, 15, 18, 20, 21, 22, 23],
+};
+
+function getCurrentHourInTimezone(timezone: string): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    hour12: false,
+  });
+  return parseInt(formatter.format(new Date()), 10);
+}
+
+function getRemainingSlots(schedule: { timezone: string; hours: number[] }): number {
+  const currentHour = getCurrentHourInTimezone(schedule.timezone);
+  const remainingHours = schedule.hours.filter((h) => h >= currentHour);
+  const slots = remainingHours.length * 4; // 4 slots per hour (every 15 min)
+  return Math.max(slots, 1); // minimum 1 to avoid division by zero
+}
+
+async function resolveBoardId(itemBoardId: string | null): Promise<string> {
+  if (itemBoardId) return itemBoardId;
+  return getPinterestBoardId();
+}
+
 export async function processNextPin(runId: string): Promise<{ processed: number }> {
   // Check daily limit
   const maxPerDay = parseInt(
@@ -30,16 +56,83 @@ export async function processNextPin(runId: string): Promise<{ processed: number
     return { processed: 0 };
   }
 
-  // How many to post this run
-  const pinsPerRun = parseInt(
-    await getConfigValue(ConfigKeys.PINS_PER_CRON_RUN, "1"),
+  // Check per-type daily limits for multiboard and recycled pins
+  const maxMultiboard = parseInt(
+    await getConfigValue(ConfigKeys.MAX_MULTIBOARD_PINS_PER_DAY, "15"),
     10
   );
-  const remaining = maxPerDay - postedToday;
-  const target = Math.min(pinsPerRun, remaining);
+  const maxRecycled = parseInt(
+    await getConfigValue(ConfigKeys.MAX_RECYCLED_PINS_PER_DAY, "10"),
+    10
+  );
+
+  const [{ count: multiboardToday }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(pinQueue)
+    .where(
+      and(
+        eq(pinQueue.status, "posted"),
+        eq(pinQueue.pinType, "multiboard"),
+        gte(pinQueue.postedAt, todayStart)
+      )
+    );
+
+  const [{ count: recycledToday }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(pinQueue)
+    .where(
+      and(
+        eq(pinQueue.status, "posted"),
+        eq(pinQueue.pinType, "recycled"),
+        gte(pinQueue.postedAt, todayStart)
+      )
+    );
+
+  // Build list of pin types that have hit their daily cap — these should be skipped
+  const cappedTypes: string[] = [];
+  if (multiboardToday >= maxMultiboard) cappedTypes.push("multiboard");
+  if (recycledToday >= maxRecycled) cappedTypes.push("recycled");
+
+  // Count pending pins that are ready to post
+  const now = new Date();
+  const [{ count: pendingReady }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(pinQueue)
+    .where(
+      and(
+        eq(pinQueue.status, "pending"),
+        lte(pinQueue.scheduledAt, now)
+      )
+    );
+
+  // Parse posting schedule config
+  const scheduleRaw = await getConfigValue(
+    ConfigKeys.PIN_POSTING_SCHEDULE,
+    JSON.stringify(DEFAULT_POSTING_SCHEDULE)
+  );
+  let schedule: { timezone: string; hours: number[] };
+  try {
+    schedule = JSON.parse(scheduleRaw);
+  } catch {
+    schedule = DEFAULT_POSTING_SCHEDULE;
+  }
+
+  // Dynamically calculate batch size
+  const remainingSlots = getRemainingSlots(schedule);
+  const remainingForDay = maxPerDay - postedToday;
+  const dynamicTarget = Math.ceil(pendingReady / remainingSlots);
+  const target = Math.max(1, Math.min(dynamicTarget, remainingForDay));
+
+  console.log(
+    `[post-pins] Backlog: ${pendingReady} ready, ${remainingSlots} slots remaining today → posting ${target} this run`
+  );
 
   let processed = 0;
-  const boardId = await getPinterestBoardId();
+
+  // Build the type exclusion clause for capped pin types (for raw SQL subquery)
+  const typeExclusion = cappedTypes.length > 0
+    ? `AND pin_type NOT IN (${cappedTypes.map((t) => `'${t}'`).join(",")})`
+    : "";
 
   for (let i = 0; i < target; i++) {
     const now = new Date();
@@ -50,10 +143,14 @@ export async function processNextPin(runId: string): Promise<{ processed: number
         and(
           eq(pinQueue.status, "pending"),
           lte(pinQueue.scheduledAt, now),
+          ...(cappedTypes.length > 0
+            ? [sql`${pinQueue.pinType} NOT IN (${sql.join(cappedTypes.map(t => sql`${t}`), sql`, `)})`]
+            : []),
           sql`${pinQueue.id} = (
             SELECT ${pinQueue.id} FROM ${pinQueue}
             WHERE ${pinQueue.status} = 'pending'
             AND ${pinQueue.scheduledAt} <= ${now.toISOString()}
+            ${sql.raw(typeExclusion)}
             ORDER BY ${pinQueue.scheduledAt} ASC
             LIMIT 1
             FOR UPDATE SKIP LOCKED
@@ -65,12 +162,14 @@ export async function processNextPin(runId: string): Promise<{ processed: number
     if (!item) break;
 
     try {
+      const boardId = await resolveBoardId(item.boardId);
       const result = await postPin({
         boardId,
         title: item.title,
         description: item.description,
         imageUrl: item.imageUrl,
         link: item.link,
+        altText: item.altText ?? undefined,
       });
 
       await db

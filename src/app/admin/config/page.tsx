@@ -23,6 +23,100 @@ interface PinterestStatus {
   tokenExpiresAt: string | null;
 }
 
+const DEFAULT_HOURS = [8, 12, 15, 18, 20, 21, 22, 23];
+const DEFAULT_TIMEZONE = "America/New_York";
+const TIMEZONES = [
+  { value: "America/New_York", label: "Eastern (ET)" },
+  { value: "America/Chicago", label: "Central (CT)" },
+  { value: "America/Denver", label: "Mountain (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific (PT)" },
+  { value: "Europe/London", label: "London (GMT/BST)" },
+  { value: "Europe/Paris", label: "Central Europe (CET)" },
+];
+
+function formatHour(h: number): string {
+  if (h === 0) return "12 AM";
+  if (h < 12) return `${h} AM`;
+  if (h === 12) return "12 PM";
+  return `${h - 12} PM`;
+}
+
+function SchedulePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  let timezone = DEFAULT_TIMEZONE;
+  let hours = DEFAULT_HOURS;
+
+  if (value) {
+    try {
+      const parsed = JSON.parse(value);
+      if (parsed.timezone) timezone = parsed.timezone;
+      if (Array.isArray(parsed.hours)) hours = parsed.hours;
+    } catch {
+      // ignore invalid JSON, use defaults
+    }
+  }
+
+  function update(tz: string, hrs: number[]) {
+    onChange(JSON.stringify({ timezone: tz, hours: hrs.sort((a, b) => a - b) }));
+  }
+
+  function toggleHour(h: number) {
+    const next = hours.includes(h) ? hours.filter((x) => x !== h) : [...hours, h];
+    update(timezone, next);
+  }
+
+  const peakHours = [20, 21, 22, 23]; // 8-11 PM
+
+  return (
+    <div className="space-y-3">
+      <Label>Pin Posting Schedule</Label>
+
+      <div className="space-y-2">
+        <Label htmlFor="schedule-tz" className="text-xs text-muted-foreground font-normal">Timezone</Label>
+        <select
+          id="schedule-tz"
+          className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          value={timezone}
+          onChange={(e) => update(e.target.value, hours)}
+        >
+          {TIMEZONES.map((tz) => (
+            <option key={tz.value} value={tz.value}>{tz.label}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground font-normal">Posting Hours (click to toggle)</Label>
+        <div className="grid grid-cols-8 gap-1.5">
+          {Array.from({ length: 24 }, (_, h) => {
+            const active = hours.includes(h);
+            const isPeak = peakHours.includes(h);
+            return (
+              <button
+                key={h}
+                type="button"
+                onClick={() => toggleHour(h)}
+                className={`rounded-md px-1 py-1.5 text-xs font-medium transition-colors border ${
+                  active
+                    ? isPeak
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-primary/80 text-primary-foreground border-primary/80"
+                    : "bg-transparent text-muted-foreground border-input hover:bg-muted"
+                }`}
+              >
+                {formatHour(h)}
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Pins are spaced ~15 min apart within each hour. Peak engagement: 8-11 PM.
+          {hours.length === 0 && <span className="text-red-500 ml-1">Select at least one hour.</span>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function ConfigPage() {
   return (
     <Suspense
@@ -52,6 +146,9 @@ function ConfigPageInner() {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [savingCreds, setSavingCreds] = useState(false);
+
+  const [creatingBoards, setCreatingBoards] = useState(false);
+  const [boardMapResult, setBoardMapResult] = useState<Record<string, string> | null>(null);
 
   const searchParams = useSearchParams();
 
@@ -165,6 +262,27 @@ function ConfigPageInner() {
       setPinterestMessage("Failed to disconnect.");
     }
     setDisconnecting(false);
+  }
+
+  async function handleCreateBoards() {
+    setCreatingBoards(true);
+    setPinterestMessage("");
+    setBoardMapResult(null);
+    try {
+      const res = await fetch("/api/admin/pinterest/create-boards", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBoardMapResult(data.boards);
+        setPinterestMessage("Boards created successfully!");
+      } else {
+        setPinterestMessage(data.error || "Failed to create boards.");
+      }
+    } catch {
+      setPinterestMessage("Failed to create boards.");
+    }
+    setCreatingBoards(false);
   }
 
   async function handleBoardSelect(boardId: string) {
@@ -398,6 +516,125 @@ function ConfigPageInner() {
               </p>
             </div>
           )}
+
+          <SchedulePicker
+            value={config[ConfigKeys.PIN_POSTING_SCHEDULE] ?? ""}
+            onChange={(val) => updateConfig(ConfigKeys.PIN_POSTING_SCHEDULE, val)}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Multi-Board Distribution */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Multi-Board Distribution
+            <Badge variant={(config[ConfigKeys.MULTI_BOARD_ENABLED] ?? "true") === "true" ? "default" : "secondary"}>
+              {(config[ConfigKeys.MULTI_BOARD_ENABLED] ?? "true") === "true" ? "Active" : "Off"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Post pins to 2-3 relevant boards for extra exposure with zero new content
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="multiboard-toggle"
+              checked={(config[ConfigKeys.MULTI_BOARD_ENABLED] ?? "true") === "true"}
+              onCheckedChange={(checked: boolean) =>
+                updateConfig(ConfigKeys.MULTI_BOARD_ENABLED, String(checked))
+              }
+            />
+            <Label htmlFor="multiboard-toggle">Enable Multi-Board</Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-multiboard">Max Multi-Board Pins Per Day</Label>
+            <Input
+              id="max-multiboard"
+              type="number"
+              min={1}
+              max={50}
+              value={config[ConfigKeys.MAX_MULTIBOARD_PINS_PER_DAY] ?? "15"}
+              onChange={(e) => updateConfig(ConfigKeys.MAX_MULTIBOARD_PINS_PER_DAY, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Secondary board copies per day. These use the same image, just posted to a different board 2-3 days later.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pin Recycling */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Pin Recycling
+            <Badge variant={config[ConfigKeys.RECYCLE_ENABLED] === "true" ? "default" : "secondary"}>
+              {config[ConfigKeys.RECYCLE_ENABLED] === "true" ? "Active" : "Off"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Automatically create fresh pin designs for published articles with new keyword angles. Runs Mon + Thu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="recycle-toggle"
+              checked={config[ConfigKeys.RECYCLE_ENABLED] === "true"}
+              onCheckedChange={(checked: boolean) =>
+                updateConfig(ConfigKeys.RECYCLE_ENABLED, String(checked))
+              }
+            />
+            <Label htmlFor="recycle-toggle">Enable Recycling</Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-recycles">Max Recycles Per Article</Label>
+            <Input
+              id="max-recycles"
+              type="number"
+              min={1}
+              max={20}
+              value={config[ConfigKeys.MAX_RECYCLES_PER_ARTICLE] ?? "5"}
+              onChange={(e) => updateConfig(ConfigKeys.MAX_RECYCLES_PER_ARTICLE, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              How many times a single article can be recycled. Each recycle creates a new pin design with a different keyword angle.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="recycle-cooldown">Cooldown (days)</Label>
+            <Input
+              id="recycle-cooldown"
+              type="number"
+              min={7}
+              max={90}
+              value={config[ConfigKeys.RECYCLE_COOLDOWN_DAYS] ?? "30"}
+              onChange={(e) => updateConfig(ConfigKeys.RECYCLE_COOLDOWN_DAYS, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Minimum days between recycling the same article. Prevents spam.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-recycled-day">Max Recycled Pins Per Day</Label>
+            <Input
+              id="max-recycled-day"
+              type="number"
+              min={1}
+              max={30}
+              value={config[ConfigKeys.MAX_RECYCLED_PINS_PER_DAY] ?? "10"}
+              onChange={(e) => updateConfig(ConfigKeys.MAX_RECYCLED_PINS_PER_DAY, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Daily budget for recycled pins. These fill remaining slots after originals and multi-board copies.
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -465,6 +702,35 @@ function ConfigPageInner() {
                     </select>
                   </div>
                 )}
+
+                <div className="space-y-3 rounded-md border p-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Auto-Categorization Boards</p>
+                      <p className="text-xs text-muted-foreground">
+                        Create 10 topic-specific boards for automatic pin routing
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCreateBoards}
+                      disabled={creatingBoards}
+                    >
+                      {creatingBoards ? "Creating..." : "Create Boards"}
+                    </Button>
+                  </div>
+                  {boardMapResult && (
+                    <div className="space-y-1">
+                      {Object.entries(boardMapResult).map(([name, id]) => (
+                        <div key={id} className="flex items-center justify-between text-xs">
+                          <span>{name}</span>
+                          <span className="font-mono text-muted-foreground">{id}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <Button
                   variant="outline"

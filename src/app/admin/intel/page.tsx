@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { intelCompetitors, intelPins } from "@/lib/db/schema";
+import { intelCompetitors, intelPins, articles } from "@/lib/db/schema";
 import { desc, eq, gte, and, isNotNull, count, avg, sum, sql } from "drizzle-orm";
 import { IntelTabs } from "./intel-tabs";
 import { computePinScore } from "@/lib/services/intel-scoring";
+import { generateSlug } from "@/lib/utils/slug";
 import type { IntelStats } from "./stats-bar";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,12 @@ export default async function IntelPage() {
       .from(intelPins),
   ]);
 
+  // Build a set of existing article slugs to detect duplicates
+  const existingArticles = await db
+    .select({ slug: articles.slug, status: articles.status, publishedUrl: articles.publishedUrl })
+    .from(articles);
+  const articlesBySlug = new Map(existingArticles.map((a) => [a.slug, a]));
+
   // Compute scores for each trending pin
   const scoredPins = trendingPins.map((pin) => {
     const { score, tier, tierColor } = computePinScore({
@@ -80,13 +87,31 @@ export default async function IntelPage() {
       title: pin.title,
       description: pin.description,
     });
-    return { ...pin, trendScore: score, scoreTier: tier, scoreTierColor: tierColor };
+    const slug = generateSlug(pin.title);
+    const existing = articlesBySlug.get(slug);
+    return {
+      ...pin,
+      trendScore: score,
+      scoreTier: tier,
+      scoreTierColor: tierColor,
+      existingArticleStatus: existing?.status ?? null,
+      existingArticleUrl: existing?.publishedUrl ?? null,
+    };
   });
 
-  // Sort by score descending
-  scoredPins.sort((a, b) => b.trendScore - a.trendScore);
+  // Filter out pins already in pipeline, already written, or junk data
+  const freshPins = scoredPins.filter(
+    (p) =>
+      !p.sentToPipeline &&
+      !p.existingArticleStatus &&
+      p.title &&
+      p.title !== "Pinterest"
+  );
 
-  const recommendedCount = scoredPins.filter((p) => p.trendScore >= 70).length;
+  // Sort by score descending
+  freshPins.sort((a, b) => b.trendScore - a.trendScore);
+
+  const recommendedCount = freshPins.filter((p) => p.trendScore >= 70).length;
 
   const stats: IntelStats = {
     totalPins: totalRow?.value ?? 0,
@@ -103,7 +128,7 @@ export default async function IntelPage() {
   return (
     <IntelTabs
       competitors={competitors}
-      trendingPins={scoredPins}
+      trendingPins={freshPins}
       stats={stats}
     />
   );

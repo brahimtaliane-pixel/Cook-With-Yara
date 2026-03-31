@@ -519,6 +519,449 @@ function PinLayoutSimple({
   };
 }
 
+// === Design 3: Bold Overlay — full-bleed image with dark gradient + large white title ===
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function PinLayoutBoldOverlay({
+  title,
+  heroImageUrl,
+  logoDataUri,
+}: {
+  title: string;
+  heroImageUrl: string;
+  logoDataUri: string;
+}): any {
+  const W = 1000;
+  const H = 1500;
+  const titleSize = title.length > 40 ? 52 : title.length > 25 ? 60 : 68;
+
+  return {
+    type: "div",
+    props: {
+      style: {
+        width: `${W}px`,
+        height: `${H}px`,
+        display: "flex",
+        position: "relative",
+        overflow: "hidden",
+      },
+      children: [
+        // Full-bleed image
+        {
+          type: "img",
+          props: {
+            src: heroImageUrl,
+            style: {
+              width: `${W}px`,
+              height: `${H}px`,
+              objectFit: "cover",
+              position: "absolute",
+              top: 0,
+              left: 0,
+            },
+          },
+        },
+        // Dark gradient overlay on bottom third
+        {
+          type: "div",
+          props: {
+            style: {
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              width: `${W}px`,
+              height: `${Math.round(H * 0.45)}px`,
+              background:
+                "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.75) 50%, rgba(0,0,0,0.9) 100%)",
+            },
+          },
+        },
+        // Title + branding at bottom
+        {
+          type: "div",
+          props: {
+            style: {
+              position: "absolute",
+              bottom: "60px",
+              left: "50px",
+              right: "50px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "20px",
+            },
+            children: [
+              {
+                type: "div",
+                props: {
+                  style: {
+                    fontFamily: "Playfair Display",
+                    color: "#FFFFFF",
+                    fontSize: `${titleSize}px`,
+                    fontWeight: 700,
+                    lineHeight: 1.15,
+                    textShadow: "0 2px 8px rgba(0,0,0,0.3)",
+                  },
+                  children: title,
+                },
+              },
+              {
+                type: "div",
+                props: {
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                  },
+                  children: [
+                    ...(logoDataUri
+                      ? [
+                          {
+                            type: "img",
+                            props: {
+                              src: logoDataUri,
+                              style: { height: "24px" },
+                            },
+                          },
+                        ]
+                      : []),
+                    {
+                      type: "div",
+                      props: {
+                        style: {
+                          fontFamily: "DM Sans",
+                          color: "rgba(255,255,255,0.85)",
+                          fontSize: "16px",
+                          fontWeight: 600,
+                        },
+                        children: "cookwithlucia.com",
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
+// === Design 4: Card Style — white card with image top 60%, title bottom 40% ===
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function PinLayoutCard({
+  title,
+  heroImageUrl,
+  logoDataUri,
+}: {
+  title: string;
+  heroImageUrl: string;
+  logoDataUri: string;
+}): any {
+  const W = 1000;
+  const H = 1500;
+  const PAD = 40;
+  const CARD_W = W - PAD * 2;
+  const CARD_H = H - PAD * 2;
+  const IMG_H = Math.round(CARD_H * 0.58);
+  const TEXT_H = CARD_H - IMG_H;
+  const titleSize = title.length > 40 ? 46 : title.length > 25 ? 52 : 58;
+
+  return {
+    type: "div",
+    props: {
+      style: {
+        width: `${W}px`,
+        height: `${H}px`,
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#F5F0EB",
+        padding: `${PAD}px`,
+      },
+      children: {
+        type: "div",
+        props: {
+          style: {
+            width: `${CARD_W}px`,
+            height: `${CARD_H}px`,
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: "20px",
+            overflow: "hidden",
+            backgroundColor: "#FFFFFF",
+            boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
+          },
+          children: [
+            // Image area
+            {
+              type: "div",
+              props: {
+                style: {
+                  width: `${CARD_W}px`,
+                  height: `${IMG_H}px`,
+                  overflow: "hidden",
+                  display: "flex",
+                },
+                children: {
+                  type: "img",
+                  props: {
+                    src: heroImageUrl,
+                    style: {
+                      width: `${CARD_W}px`,
+                      height: `${IMG_H + 20}px`,
+                      objectFit: "cover",
+                    },
+                  },
+                },
+              },
+            },
+            // Text area
+            {
+              type: "div",
+              props: {
+                style: {
+                  width: `${CARD_W}px`,
+                  height: `${TEXT_H}px`,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
+                  alignItems: "center",
+                  padding: "0 50px",
+                  gap: "20px",
+                },
+                children: [
+                  {
+                    type: "div",
+                    props: {
+                      style: {
+                        fontFamily: "DM Sans",
+                        color: BRAND.accent,
+                        fontSize: "15px",
+                        fontWeight: 600,
+                        letterSpacing: "4px",
+                        textTransform: "uppercase",
+                      },
+                      children: "RECIPE",
+                    },
+                  },
+                  {
+                    type: "div",
+                    props: {
+                      style: {
+                        fontFamily: "Playfair Display",
+                        color: BRAND.foreground,
+                        fontSize: `${titleSize}px`,
+                        fontWeight: 700,
+                        lineHeight: 1.15,
+                        textAlign: "center",
+                      },
+                      children: title,
+                    },
+                  },
+                  {
+                    type: "div",
+                    props: {
+                      style: {
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                      },
+                      children: [
+                        ...(logoDataUri
+                          ? [
+                              {
+                                type: "img",
+                                props: {
+                                  src: logoDataUri,
+                                  style: { height: "20px" },
+                                },
+                              },
+                            ]
+                          : []),
+                        {
+                          type: "div",
+                          props: {
+                            style: {
+                              fontFamily: "DM Sans",
+                              color: BRAND.primary,
+                              fontSize: "14px",
+                              fontWeight: 600,
+                            },
+                            children: "cookwithlucia.com",
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+}
+
+// === Design 5: Minimal — colored accent bar, small image, prominent title ===
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function PinLayoutMinimal({
+  title,
+  heroImageUrl,
+  logoDataUri,
+}: {
+  title: string;
+  heroImageUrl: string;
+  logoDataUri: string;
+}): any {
+  const W = 1000;
+  const H = 1500;
+  const ACCENT_W = 12;
+  const IMG_SIZE = 400;
+  const titleSize = title.length > 40 ? 48 : title.length > 25 ? 56 : 64;
+
+  return {
+    type: "div",
+    props: {
+      style: {
+        width: `${W}px`,
+        height: `${H}px`,
+        display: "flex",
+        backgroundColor: BRAND.cream,
+        position: "relative",
+      },
+      children: [
+        // Left accent bar
+        {
+          type: "div",
+          props: {
+            style: {
+              position: "absolute",
+              top: "60px",
+              left: "40px",
+              width: `${ACCENT_W}px`,
+              height: `${H - 120}px`,
+              backgroundColor: BRAND.primary,
+              borderRadius: "6px",
+            },
+          },
+        },
+        // Content area
+        {
+          type: "div",
+          props: {
+            style: {
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "center",
+              alignItems: "center",
+              width: `${W}px`,
+              height: `${H}px`,
+              padding: "0 80px",
+              gap: "40px",
+            },
+            children: [
+              // Rounded image
+              {
+                type: "div",
+                props: {
+                  style: {
+                    width: `${IMG_SIZE}px`,
+                    height: `${IMG_SIZE}px`,
+                    borderRadius: "50%",
+                    overflow: "hidden",
+                    border: `4px solid ${BRAND.primary}22`,
+                    display: "flex",
+                  },
+                  children: {
+                    type: "img",
+                    props: {
+                      src: heroImageUrl,
+                      style: {
+                        width: `${IMG_SIZE}px`,
+                        height: `${IMG_SIZE}px`,
+                        objectFit: "cover",
+                      },
+                    },
+                  },
+                },
+              },
+              // Title
+              {
+                type: "div",
+                props: {
+                  style: {
+                    fontFamily: "Playfair Display",
+                    color: BRAND.foreground,
+                    fontSize: `${titleSize}px`,
+                    fontWeight: 700,
+                    lineHeight: 1.15,
+                    textAlign: "center",
+                    maxWidth: "780px",
+                  },
+                  children: title,
+                },
+              },
+              // Decorative divider
+              {
+                type: "div",
+                props: {
+                  style: {
+                    width: "80px",
+                    height: "3px",
+                    backgroundColor: BRAND.primary,
+                    borderRadius: "2px",
+                  },
+                },
+              },
+              // Branding
+              {
+                type: "div",
+                props: {
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                  },
+                  children: [
+                    ...(logoDataUri
+                      ? [
+                          {
+                            type: "img",
+                            props: {
+                              src: logoDataUri,
+                              style: { height: "24px" },
+                            },
+                          },
+                        ]
+                      : []),
+                    {
+                      type: "div",
+                      props: {
+                        style: {
+                          fontFamily: "DM Sans",
+                          color: BRAND.primary,
+                          fontSize: "16px",
+                          fontWeight: 600,
+                          letterSpacing: "1px",
+                        },
+                        children: "cookwithlucia.com",
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    },
+  };
+}
+
 // === Public API ===
 
 async function renderPin(element: unknown): Promise<Buffer> {
@@ -572,4 +1015,64 @@ export async function generatePinImageSimple(
     logoDataUri,
   });
   return renderPin(element);
+}
+
+/** Design 3: Bold Overlay — full-bleed image with dark gradient and large white title */
+export async function generatePinImageBoldOverlay(
+  params: PinImageParams,
+): Promise<Buffer> {
+  const logoDataUri = await getLogoDataUri();
+  const element = PinLayoutBoldOverlay({
+    title: params.title,
+    heroImageUrl: params.heroImageUrl,
+    logoDataUri,
+  });
+  return renderPin(element);
+}
+
+/** Design 4: Card Style — white card with shadow, image top, title bottom */
+export async function generatePinImageCard(
+  params: PinImageParams,
+): Promise<Buffer> {
+  const logoDataUri = await getLogoDataUri();
+  const element = PinLayoutCard({
+    title: params.title,
+    heroImageUrl: params.heroImageUrl,
+    logoDataUri,
+  });
+  return renderPin(element);
+}
+
+/** Design 5: Minimal — accent bar, circular image, prominent title */
+export async function generatePinImageMinimal(
+  params: PinImageParams,
+): Promise<Buffer> {
+  const logoDataUri = await getLogoDataUri();
+  const element = PinLayoutMinimal({
+    title: params.title,
+    heroImageUrl: params.heroImageUrl,
+    logoDataUri,
+  });
+  return renderPin(element);
+}
+
+/** Dispatcher — routes to the correct design template by number */
+export async function generatePinDesign(
+  designNum: number,
+  params: PinImageParams,
+): Promise<Buffer> {
+  switch (designNum) {
+    case 1:
+      return generatePinImage(params);
+    case 2:
+      return generatePinImageSimple(params);
+    case 3:
+      return generatePinImageBoldOverlay(params);
+    case 4:
+      return generatePinImageCard(params);
+    case 5:
+      return generatePinImageMinimal(params);
+    default:
+      return generatePinImage(params);
+  }
 }

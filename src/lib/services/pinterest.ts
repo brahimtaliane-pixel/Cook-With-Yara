@@ -24,6 +24,7 @@ export interface CreatePinParams {
   description: string;
   imageUrl: string;
   link: string;
+  altText?: string;
 }
 
 export interface PinterestPin {
@@ -218,12 +219,71 @@ export async function createPin(params: CreatePinParams): Promise<PinterestPin> 
       title: params.title,
       description: params.description,
       link: params.link,
+      ...(params.altText ? { alt_text: params.altText } : {}),
       media_source: {
         source_type: "image_url",
         url: params.imageUrl,
       },
     }),
   });
+}
+
+// === Pin Analytics ===
+
+export interface PinAnalyticsData {
+  impressions: number;
+  saves: number;
+  clicks: number;
+  closeups: number;
+}
+
+export async function fetchPinAnalytics(
+  pinId: string
+): Promise<PinAnalyticsData> {
+  try {
+    const endDate = new Date().toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
+
+    const data = await pinterestFetch<{
+      all: {
+        daily_metrics: Array<{
+          data_status: string;
+          metrics: Record<string, number>;
+        }>;
+      };
+    }>(
+      `/pins/${pinId}/analytics?start_date=${startDate}&end_date=${endDate}&metric_types=IMPRESSION,SAVE,PIN_CLICK,CLOSEUP&app_types=all`
+    );
+
+    let impressions = 0;
+    let saves = 0;
+    let clicks = 0;
+    let closeups = 0;
+
+    for (const day of data.all?.daily_metrics ?? []) {
+      impressions += day.metrics?.IMPRESSION ?? 0;
+      saves += day.metrics?.SAVE ?? 0;
+      clicks += day.metrics?.PIN_CLICK ?? 0;
+      closeups += day.metrics?.CLOSEUP ?? 0;
+    }
+
+    return { impressions, saves, clicks, closeups };
+  } catch {
+    // Fallback: try basic pin data for save_count
+    try {
+      const pin = await pinterestFetch<{ save_count?: number }>(`/pins/${pinId}`);
+      return {
+        impressions: 0,
+        saves: pin.save_count ?? 0,
+        clicks: 0,
+        closeups: 0,
+      };
+    } catch {
+      return { impressions: 0, saves: 0, clicks: 0, closeups: 0 };
+    }
+  }
 }
 
 export async function fetchUserAccount(): Promise<PinterestUserAccount> {

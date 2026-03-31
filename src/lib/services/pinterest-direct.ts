@@ -11,6 +11,7 @@ export interface DirectPinParams {
   description: string;
   imageUrl: string; // URL of image in Vercel Blob storage
   link: string;
+  altText?: string;
 }
 
 export interface DirectPinResult {
@@ -132,6 +133,7 @@ export async function createPinDirect(
       link: params.link,
       image_url: uploadedImageUrl,
       method: "uploaded",
+      ...(params.altText ? { alt_text: params.altText } : {}),
     },
     context: {},
   };
