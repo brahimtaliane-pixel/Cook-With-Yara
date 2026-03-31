@@ -217,7 +217,7 @@ const DESIGN_NAMES: Record<number, string> = {
   5: "Minimal",
 };
 
-function PinActivity({ articleId }: { articleId: string }) {
+function PinActivity({ articleId, onPostedCount }: { articleId: string; onPostedCount?: (count: number) => void }) {
   const [pins, setPins] = useState<PinEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -228,6 +228,8 @@ function PinActivity({ articleId }: { articleId: string }) {
       .then((data: { pins: PinEntry[] }) => {
         setPins(data.pins);
         setLoading(false);
+        const posted = data.pins.filter((p: PinEntry) => p.status === "posted").length;
+        onPostedCount?.(posted);
       })
       .catch(() => setLoading(false));
   }, [articleId]);
@@ -388,6 +390,9 @@ function PinActivity({ articleId }: { articleId: string }) {
 }
 
 export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
+  const [postedPinCount, setPostedPinCount] = useState(0);
+  const hasPostedPins = postedPinCount > 0 || !!article.pinterestPinId;
+
   return (
     <Tabs defaultValue="content">
       <TabsList>
@@ -508,10 +513,10 @@ export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
       {/* Pinterest Tab */}
       <TabsContent value="pinterest" className="space-y-4 pt-4">
         {/* Pin Activity — all pins queued/posted for this article */}
-        <PinActivity articleId={article.id} />
+        <PinActivity articleId={article.id} onPostedCount={setPostedPinCount} />
 
         {/* Post to Pinterest via API */}
-        {!article.pinterestPinId && (article.pinImageUrl || article.pinImageUrl2) && (
+        {!hasPostedPins && (article.pinImageUrl || article.pinImageUrl2) && (
           <Card className="border-green-200 bg-green-50/50 dark:border-green-900 dark:bg-green-950/20">
             <CardHeader>
               <CardTitle className="text-sm">Post to Pinterest</CardTitle>
@@ -525,8 +530,8 @@ export function ArticleTabs({ article, recipe, contentMdx }: ArticleTabsProps) {
           </Card>
         )}
 
-        {/* Manual posting card — shown when no Pinterest pin ID yet */}
-        {!article.pinterestPinId && (article.pinImageUrl || article.pinImageUrl2) && (
+        {/* Manual posting card — shown when no pins posted yet */}
+        {!hasPostedPins && (article.pinImageUrl || article.pinImageUrl2) && (
           <Card className="border-primary/20 bg-primary/[0.02]">
             <CardHeader>
               <CardTitle className="text-sm">Manual Pin Posting</CardTitle>
