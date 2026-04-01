@@ -8,7 +8,7 @@ import { eq, and, sql, lte, gte } from "drizzle-orm";
 
 const DEFAULT_POSTING_SCHEDULE = {
   timezone: "America/New_York",
-  hours: [8, 12, 15, 18, 20, 21, 22, 23],
+  hours: [7, 8, 9, 11, 12, 14, 15, 17, 18, 20],
 };
 
 function getCurrentHourInTimezone(timezone: string): number {

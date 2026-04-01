@@ -11,7 +11,7 @@ interface PostingSchedule {
 
 const DEFAULT_SCHEDULE: PostingSchedule = {
   timezone: "America/New_York",
-  hours: [8, 12, 15, 18, 20, 21, 22, 23],
+  hours: [7, 8, 9, 11, 12, 14, 15, 17, 18, 20],
 };
 
 const SLOT_SPACING_MIN = 15;
