@@ -109,7 +109,7 @@ function SchedulePicker({ value, onChange }: { value: string; onChange: (v: stri
           })}
         </div>
         <p className="text-xs text-muted-foreground">
-          Each hour = 4 pin slots (every 15 min). Total daily capacity = {hours.length * 4} pins.
+          Pins are distributed evenly across selected hours to hit your daily target. More hours = more natural spacing.
           {hours.length === 0 && <span className="text-red-500 ml-1">Select at least one hour.</span>}
         </p>
       </div>

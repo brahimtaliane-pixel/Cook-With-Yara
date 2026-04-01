@@ -20,10 +20,11 @@ function getCurrentHourInTimezone(timezone: string): number {
   return parseInt(formatter.format(new Date()), 10);
 }
 
-function getRemainingSlots(schedule: { timezone: string; hours: number[] }): number {
+function getRemainingSlots(schedule: { timezone: string; hours: number[] }, dailyTarget: number): number {
   const currentHour = getCurrentHourInTimezone(schedule.timezone);
   const remainingHours = schedule.hours.filter((h) => h >= currentHour);
-  const slots = remainingHours.length * 4; // 4 slots per hour (every 15 min)
+  const slotsPerHour = Math.ceil(dailyTarget / Math.max(schedule.hours.length, 1));
+  const slots = remainingHours.length * slotsPerHour;
   return Math.max(slots, 1); // minimum 1 to avoid division by zero
 }
 
@@ -118,7 +119,7 @@ export async function processNextPin(runId: string): Promise<{ processed: number
   }
 
   // Dynamically calculate batch size
-  const remainingSlots = getRemainingSlots(schedule);
+  const remainingSlots = getRemainingSlots(schedule, maxPerDay);
   const remainingForDay = maxPerDay - postedToday;
   const dynamicTarget = Math.ceil(pendingReady / remainingSlots);
   const target = Math.max(1, Math.min(dynamicTarget, remainingForDay));

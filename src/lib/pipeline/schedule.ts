@@ -14,9 +14,8 @@ const DEFAULT_SCHEDULE: PostingSchedule = {
   hours: [7, 8, 9, 11, 12, 14, 15, 17, 18, 20],
 };
 
-const SLOT_SPACING_MIN = 15;
-const MAX_SLOTS_PER_HOUR = 4; // 60 / 15
 const LOOKAHEAD_DAYS = 3;
+const MIN_SPACING_MIN = 1; // absolute minimum spacing between pins
 
 async function getScheduleConfig(): Promise<PostingSchedule> {
   const raw = await getConfigValue(ConfigKeys.PIN_POSTING_SCHEDULE, "");
@@ -30,6 +29,23 @@ async function getScheduleConfig(): Promise<PostingSchedule> {
   } catch {
     return DEFAULT_SCHEDULE;
   }
+}
+
+/**
+ * Calculate how many slots per hour and the spacing between them
+ * based on daily target and number of posting hours.
+ *
+ * 40 pins / 4 hours = 10 per hour, 6 min apart
+ * 40 pins / 10 hours = 4 per hour, 15 min apart
+ * 40 pins / 1 hour = 40 per hour, 1.5 min apart (clamped to 1 min)
+ */
+function calculateSlotParams(dailyTarget: number, hourCount: number): {
+  slotsPerHour: number;
+  spacingMin: number;
+} {
+  const slotsPerHour = Math.ceil(dailyTarget / hourCount);
+  const spacingMin = Math.max(MIN_SPACING_MIN, Math.floor(60 / slotsPerHour));
+  return { slotsPerHour, spacingMin };
 }
 
 /** Get the hour in the target timezone for a given Date */
@@ -70,10 +86,8 @@ function buildSlotDate(
   minuteOffset: number,
   timezone: string
 ): Date {
-  // Create a date string in the target timezone, then convert to UTC
   const dateStr = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:${String(minuteOffset).padStart(2, "0")}:00`;
 
-  // Use Intl to find the UTC offset for this moment in the timezone
   const tempDate = new Date(dateStr + "Z");
   const utcFormatter = new Intl.DateTimeFormat("en-US", {
     timeZone: "UTC",
@@ -100,7 +114,6 @@ function buildSlotDate(
   const tzTotal = tzHour * 60 + tzMin;
   const offsetMinutes = utcTotal - tzTotal;
 
-  // Apply offset: slot in TZ → UTC
   const slotUtc = new Date(dateStr + "Z");
   slotUtc.setMinutes(slotUtc.getMinutes() + offsetMinutes);
   return slotUtc;
@@ -111,15 +124,29 @@ interface GetNextSlotOptions {
 }
 
 /**
- * Finds the next available posting slot based on configured hours.
- * Spaces pins ~15 min apart within the same hour.
- * options.afterSlot ensures the slot is 4+ hours after a given time.
+ * Finds the next available posting slot.
+ *
+ * Dynamically calculates slots per hour based on:
+ *   daily pin target ÷ number of posting hours
+ *
+ * So if you set 40 pins/day and pick 4 hours, you get 10 slots/hour
+ * spaced 6 min apart. If you pick 1 hour, 40 slots spaced ~1 min apart.
+ * The hours control WHEN, the daily target controls HOW MANY.
  */
 export async function getNextPostingSlot(
   options?: GetNextSlotOptions
 ): Promise<Date> {
   const schedule = await getScheduleConfig();
+  const dailyTarget = parseInt(
+    await getConfigValue(ConfigKeys.MAX_PINS_PER_DAY, "40"),
+    10
+  );
   const now = new Date();
+
+  const { slotsPerHour, spacingMin } = calculateSlotParams(
+    dailyTarget,
+    schedule.hours.length
+  );
 
   // Minimum time: either now or afterSlot + 4 hours
   const minTime = options?.afterSlot
@@ -153,8 +180,9 @@ export async function getNextPostingSlot(
     const { year, month, day } = getDatePartsInTimezone(checkDate, schedule.timezone);
 
     for (const hour of sortedHours) {
-      for (let slotIdx = 0; slotIdx < MAX_SLOTS_PER_HOUR; slotIdx++) {
-        const minuteOffset = slotIdx * SLOT_SPACING_MIN;
+      for (let slotIdx = 0; slotIdx < slotsPerHour; slotIdx++) {
+        const minuteOffset = slotIdx * spacingMin;
+        if (minuteOffset >= 60) break; // safety: don't overflow into next hour
         const slotDate = buildSlotDate(year, month, day, hour, minuteOffset, schedule.timezone);
 
         // Must be in the future and after minTime
