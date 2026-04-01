@@ -526,23 +526,34 @@ export async function checkRepinStatus(
     await Promise.allSettled(
       batch.map(async (pinId) => {
         try {
-          const data = JSON.stringify({
-            options: { id: pinId, field_set_key: "detailed" },
-            context: {},
-          });
-          const url = `https://www.pinterest.com/resource/PinResource/get/?data=${encodeURIComponent(data)}&source_url=/pin/${pinId}/`;
+          const formData = new URLSearchParams();
+          formData.set("source_url", `/pin/${pinId}/`);
+          formData.set(
+            "data",
+            JSON.stringify({
+              options: { id: pinId, field_set_key: "detailed" },
+              context: {},
+            })
+          );
 
-          const res = await fetch(url, {
-            headers: {
-              "User-Agent":
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-              Accept: "application/json",
-              "X-Requested-With": "XMLHttpRequest",
-              "X-CSRFToken": session.csrfToken,
-              Cookie: session.cookies,
-              Referer: "https://www.pinterest.com/",
-            },
-          });
+          const res = await fetch(
+            "https://www.pinterest.com/resource/PinResource/get/",
+            {
+              method: "POST",
+              headers: {
+                "User-Agent":
+                  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                Accept: "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "X-Requested-With": "XMLHttpRequest",
+                "X-CSRFToken": session.csrfToken,
+                "X-Pinterest-AppState": "active",
+                Cookie: session.cookies,
+                Referer: `https://www.pinterest.com/pin/${pinId}/`,
+              },
+              body: formData.toString(),
+            }
+          );
 
           if (!res.ok) return;
 
@@ -550,14 +561,7 @@ export async function checkRepinStatus(
           const pin = json?.resource_response?.data;
           if (!pin) return;
 
-          // A pin is a repin if origin_pinner differs from pinner
-          const isRepin =
-            pin.is_repin === true ||
-            (pin.origin_pinner &&
-              pin.pinner &&
-              pin.origin_pinner.id !== pin.pinner.id);
-
-          if (isRepin) {
+          if (pin.is_repin === true) {
             repinIds.add(pinId);
           }
         } catch {
