@@ -22,6 +22,8 @@ export interface WidgetPinData {
   title: string;
   domain: string;
   createdAt: string | null;
+  datePublished: string | null;
+  articleLink: string | null;
 }
 
 // === Enriched pin (Apify already has all widget data) ===
@@ -142,6 +144,8 @@ export async function enrichPinsViaWidget(
           title: pin.rich_metadata?.title ?? pin.grid_title ?? "",
           domain: pin.domain ?? pin.rich_metadata?.site_name ?? "",
           createdAt: pin.created_at ?? null,
+          datePublished: pin.rich_metadata?.article?.date_published ?? null,
+          articleLink: pin.link ?? null,
         });
       }
     } catch (err) {
@@ -575,22 +579,87 @@ export async function checkRepinStatus(
 }
 
 /**
- * Safety net: reject pins with implausible saves/day ratios.
- * A brand-new pin can't realistically get >2000 saves/day —
- * if it does, the created_at is likely from a repin (fresh date on old content).
+ * Fetch the real publish date from an article URL by reading JSON-LD schema.org data.
+ * Falls back to meta tags. Returns null if nothing found.
  */
-export function isSavesPlausible(
-  saves: number,
-  createdAt: Date | string | null
-): boolean {
-  if (!createdAt || saves <= 0) return true;
-  const created =
-    typeof createdAt === "string" ? new Date(createdAt) : createdAt;
-  const daysOld = Math.max(
-    1,
-    (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  return saves / daysOld <= 2000;
+export async function fetchRealPublishDate(
+  articleUrl: string
+): Promise<Date | null> {
+  if (!articleUrl) return null;
+  try {
+    const res = await fetch(articleUrl, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; CookWithLucia/1.0; +https://cookwithlucia.com)",
+        Accept: "text/html",
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // Try JSON-LD datePublished
+    const jsonLdMatches = html.matchAll(
+      /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi
+    );
+    for (const m of jsonLdMatches) {
+      try {
+        const ld = JSON.parse(m[1]);
+        const items = Array.isArray(ld) ? ld : [ld];
+        for (const item of items) {
+          if (item.datePublished) {
+            const d = new Date(item.datePublished);
+            if (!isNaN(d.getTime())) return d;
+          }
+        }
+      } catch {
+        // malformed JSON-LD, skip
+      }
+    }
+
+    // Fallback: meta article:published_time
+    const metaMatch = html.match(
+      /<meta[^>]*property=["']article:published_time["'][^>]*content=["']([^"']+)["']/i
+    );
+    if (metaMatch) {
+      const d = new Date(metaMatch[1]);
+      if (!isNaN(d.getTime())) return d;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve the real date a pin's content was published.
+ * Priority: rich_metadata.date_published > scrape article URL > widget created_at > null
+ */
+export async function resolveRealPinDate(
+  widgetDatePublished: string | null,
+  widgetCreatedAt: string | null,
+  articleUrl: string
+): Promise<Date | null> {
+  // 1. rich_metadata date_published (from Widget API)
+  if (widgetDatePublished) {
+    const d = new Date(widgetDatePublished);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  // 2. Scrape the actual article for datePublished
+  if (articleUrl && !articleUrl.includes("pinterest.com")) {
+    const scraped = await fetchRealPublishDate(articleUrl);
+    if (scraped) return scraped;
+  }
+
+  // 3. Widget API created_at (last resort — may be board-save date)
+  if (widgetCreatedAt) {
+    const d = new Date(widgetCreatedAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+
+  return null;
 }
 
 // === URL Parsing ===

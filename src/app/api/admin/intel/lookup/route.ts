@@ -6,7 +6,7 @@ import {
   enrichPinsViaWidget,
   computeVelocity,
   checkRepinStatus,
-  isSavesPlausible,
+  resolveRealPinDate,
 } from "@/lib/services/pinterest-intel";
 
 export async function POST(request: Request) {
@@ -47,16 +47,13 @@ export async function POST(request: Request) {
     );
   }
 
-  const pinCreatedAt = widgetData.createdAt
-    ? new Date(widgetData.createdAt)
-    : null;
-
-  if (!isSavesPlausible(widgetData.saves, pinCreatedAt)) {
-    return NextResponse.json(
-      { error: "Pin has implausible saves for its age — likely a repin with a fresh date." },
-      { status: 422 }
-    );
-  }
+  // Resolve real publish date
+  const articleUrl = widgetData.articleLink || "";
+  const pinCreatedAt = await resolveRealPinDate(
+    widgetData.datePublished,
+    widgetData.createdAt,
+    articleUrl
+  );
 
   const velocity = computeVelocity(widgetData.saves, pinCreatedAt);
 
