@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { intelCompetitors, intelPins, intelPinSnapshots } from "@/lib/db/schema";
+import { intelCompetitors, intelPins, intelPinSnapshots, autopilotDecisions } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 
 export async function PATCH(
@@ -48,7 +48,15 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
-  // Delete snapshots for this competitor's pins first
+  // Delete autopilot decisions referencing this competitor's pins
+  await db.delete(autopilotDecisions).where(
+    sql`${autopilotDecisions.intelPinId} IN (
+      SELECT ${intelPins.id} FROM ${intelPins}
+      WHERE ${intelPins.competitorId} = ${id}
+    )`
+  );
+
+  // Delete snapshots for this competitor's pins
   await db.delete(intelPinSnapshots).where(
     sql`${intelPinSnapshots.pinId} IN (
       SELECT ${intelPins.pinId} FROM ${intelPins}
