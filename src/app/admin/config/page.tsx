@@ -23,7 +23,7 @@ interface PinterestStatus {
   tokenExpiresAt: string | null;
 }
 
-const DEFAULT_HOURS = [8, 12, 15, 18, 20, 21, 22, 23];
+const DEFAULT_HOURS = [7, 8, 9, 11, 12, 14, 15, 17, 18, 20];
 const DEFAULT_TIMEZONE = "America/New_York";
 const TIMEZONES = [
   { value: "America/New_York", label: "Eastern (ET)" },
@@ -109,7 +109,7 @@ function SchedulePicker({ value, onChange }: { value: string; onChange: (v: stri
           })}
         </div>
         <p className="text-xs text-muted-foreground">
-          Pins are spaced ~15 min apart within each hour. Peak engagement: 8-11 PM.
+          Each hour = 4 pin slots (every 15 min). Total daily capacity = {hours.length * 4} pins.
           {hours.length === 0 && <span className="text-red-500 ml-1">Select at least one hour.</span>}
         </p>
       </div>
