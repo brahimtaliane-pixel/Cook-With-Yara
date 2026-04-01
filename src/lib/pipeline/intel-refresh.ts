@@ -7,6 +7,8 @@ import {
   searchPinterestViaApify,
   computeVelocity,
   isRecentPin,
+  checkRepinStatus,
+  isSavesPlausible,
   type EnrichedPin,
 } from "@/lib/services/pinterest-intel";
 import {
@@ -515,7 +517,7 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
       const enriched = await enrichPinsViaWidget(pinIds);
 
       const now = new Date();
-      const inserts = results
+      const candidates = results
         .map((pin) => {
           const wd = enriched.get(pin.pinId);
           const saves = wd?.saves ?? 0;
@@ -532,6 +534,22 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
           return { pin, wd, saves, pinCreatedAt, velocity, now };
         })
         .filter((x): x is NonNullable<typeof x> => x !== null);
+
+      // Filter out repins and implausible saves
+      const candidateIds = candidates.map((c) => c.pin.pinId);
+      const repinIds = await checkRepinStatus(candidateIds);
+      const inserts = candidates.filter((c) => {
+        if (repinIds.has(c.pin.pinId)) return false;
+        if (!isSavesPlausible(c.saves, c.pinCreatedAt)) {
+          console.log(`[intel-trending] Implausible saves for ${c.pin.pinId}: ${c.saves} saves, created ${c.pinCreatedAt?.toISOString()}`);
+          return false;
+        }
+        return true;
+      });
+
+      if (candidates.length !== inserts.length) {
+        console.log(`[intel-trending] Filtered ${candidates.length - inserts.length}/${candidates.length} pins (repins/implausible)`);
+      }
 
       for (let i = 0; i < inserts.length; i += DB_BATCH_SIZE) {
         const batch = inserts.slice(i, i + DB_BATCH_SIZE);

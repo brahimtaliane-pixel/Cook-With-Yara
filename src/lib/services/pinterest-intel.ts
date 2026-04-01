@@ -477,6 +477,122 @@ export function parseApifyItems(items: any[]): EnrichedPin[] {
     .filter((p): p is EnrichedPin => p !== null);
 }
 
+// === Repin Detection (Pinterest Resource API) ===
+
+async function getPublicCsrf(): Promise<{
+  cookies: string;
+  csrfToken: string;
+} | null> {
+  const res = await fetch("https://www.pinterest.com/", {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      Accept: "text/html",
+    },
+  });
+
+  if (!res.ok) return null;
+  await res.text();
+
+  const setCookies = res.headers.getSetCookie?.() || [];
+  const cookies = setCookies.map((c) => c.split(";")[0]).join("; ");
+  const csrfMatch = cookies.match(/csrftoken=([a-f0-9]+)/);
+  const csrfToken = csrfMatch?.[1] || "";
+
+  if (!csrfToken) return null;
+  return { cookies, csrfToken };
+}
+
+/**
+ * Check which pins are repins (someone saving an existing pin to their board).
+ * Uses Pinterest's PinResource/get endpoint with a public CSRF token.
+ * Returns a Set of pin IDs that are repins.
+ */
+export async function checkRepinStatus(
+  pinIds: string[]
+): Promise<Set<string>> {
+  const repinIds = new Set<string>();
+  if (pinIds.length === 0) return repinIds;
+
+  const session = await getPublicCsrf();
+  if (!session) {
+    console.warn("[repin-check] Could not get CSRF token, skipping repin check");
+    return repinIds;
+  }
+
+  const BATCH_SIZE = 10;
+  for (let i = 0; i < pinIds.length; i += BATCH_SIZE) {
+    const batch = pinIds.slice(i, i + BATCH_SIZE);
+    await Promise.allSettled(
+      batch.map(async (pinId) => {
+        try {
+          const data = JSON.stringify({
+            options: { id: pinId, field_set_key: "detailed" },
+            context: {},
+          });
+          const url = `https://www.pinterest.com/resource/PinResource/get/?data=${encodeURIComponent(data)}&source_url=/pin/${pinId}/`;
+
+          const res = await fetch(url, {
+            headers: {
+              "User-Agent":
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              Accept: "application/json",
+              "X-Requested-With": "XMLHttpRequest",
+              "X-CSRFToken": session.csrfToken,
+              Cookie: session.cookies,
+              Referer: "https://www.pinterest.com/",
+            },
+          });
+
+          if (!res.ok) return;
+
+          const json = await res.json();
+          const pin = json?.resource_response?.data;
+          if (!pin) return;
+
+          // A pin is a repin if origin_pinner differs from pinner
+          const isRepin =
+            pin.is_repin === true ||
+            (pin.origin_pinner &&
+              pin.pinner &&
+              pin.origin_pinner.id !== pin.pinner.id);
+
+          if (isRepin) {
+            repinIds.add(pinId);
+          }
+        } catch {
+          // Skip individual pin failures
+        }
+      })
+    );
+  }
+
+  if (repinIds.size > 0) {
+    console.log(`[repin-check] Found ${repinIds.size} repins out of ${pinIds.length} pins`);
+  }
+
+  return repinIds;
+}
+
+/**
+ * Safety net: reject pins with implausible saves/day ratios.
+ * A brand-new pin can't realistically get >2000 saves/day —
+ * if it does, the created_at is likely from a repin (fresh date on old content).
+ */
+export function isSavesPlausible(
+  saves: number,
+  createdAt: Date | string | null
+): boolean {
+  if (!createdAt || saves <= 0) return true;
+  const created =
+    typeof createdAt === "string" ? new Date(createdAt) : createdAt;
+  const daysOld = Math.max(
+    1,
+    (Date.now() - created.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return saves / daysOld <= 2000;
+}
+
 // === URL Parsing ===
 
 export function extractPinIdFromUrl(url: string): string | null {

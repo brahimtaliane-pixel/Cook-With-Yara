@@ -5,6 +5,8 @@ import {
   extractPinIdFromUrl,
   enrichPinsViaWidget,
   computeVelocity,
+  checkRepinStatus,
+  isSavesPlausible,
 } from "@/lib/services/pinterest-intel";
 
 export async function POST(request: Request) {
@@ -36,9 +38,26 @@ export async function POST(request: Request) {
     );
   }
 
+  // Check if this pin is a repin
+  const repinIds = await checkRepinStatus([pinId]);
+  if (repinIds.has(pinId)) {
+    return NextResponse.json(
+      { error: "This pin is a repin (saved from another creator). Repins are excluded from intel." },
+      { status: 422 }
+    );
+  }
+
   const pinCreatedAt = widgetData.createdAt
     ? new Date(widgetData.createdAt)
     : null;
+
+  if (!isSavesPlausible(widgetData.saves, pinCreatedAt)) {
+    return NextResponse.json(
+      { error: "Pin has implausible saves for its age — likely a repin with a fresh date." },
+      { status: 422 }
+    );
+  }
+
   const velocity = computeVelocity(widgetData.saves, pinCreatedAt);
 
   const [pin] = await db

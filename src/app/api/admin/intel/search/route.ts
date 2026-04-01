@@ -5,6 +5,8 @@ import {
   searchPinterestViaApify,
   enrichPinsViaWidget,
   computeVelocity,
+  checkRepinStatus,
+  isSavesPlausible,
 } from "@/lib/services/pinterest-intel";
 
 export async function POST(request: Request) {
@@ -27,9 +29,13 @@ export async function POST(request: Request) {
   const pinIds = results.map((p) => p.pinId);
   const enriched = await enrichPinsViaWidget(pinIds);
 
+  // Filter out repins
+  const repinIds = await checkRepinStatus(pinIds);
+
   const pins = [];
 
   for (const pin of results) {
+    if (repinIds.has(pin.pinId)) continue;
     const widgetData = enriched.get(pin.pinId);
     const saves = widgetData?.saves ?? 0;
     const pinCreatedAt = widgetData?.createdAt
@@ -37,6 +43,9 @@ export async function POST(request: Request) {
       : pin.publishedAt
         ? new Date(pin.publishedAt)
         : null;
+
+    if (!isSavesPlausible(saves, pinCreatedAt)) continue;
+
     const velocity = computeVelocity(saves, pinCreatedAt);
 
     const [inserted] = await db
