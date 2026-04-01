@@ -71,7 +71,7 @@ export function CompetitorRowActions({
   }
 
   return (
-    <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+    <div className="flex items-center gap-2">
       <Switch
         checked={isActive}
         onCheckedChange={handleToggle}
