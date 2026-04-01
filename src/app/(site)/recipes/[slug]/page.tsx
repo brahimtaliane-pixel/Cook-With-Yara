@@ -298,7 +298,11 @@ export default async function RecipePage({ params }: Props) {
 
             {/* Blog prose (the story, tips, etc.) */}
             {article.contentMdx && (
-              <RecipeContent source={article.contentMdx} />
+              <RecipeContent
+                source={article.contentMdx}
+                heroImageUrl={article.heroImageUrl}
+                heroAlt={article.title || "Recipe photo"}
+              />
             )}
 
             {/* ── Structured Recipe Card ── */}
