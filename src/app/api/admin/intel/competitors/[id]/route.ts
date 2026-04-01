@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { intelCompetitors } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { intelCompetitors, intelPins, intelPinSnapshots } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 
 export async function PATCH(
   request: Request,
@@ -48,6 +48,18 @@ export async function DELETE(
 ) {
   const { id } = await params;
 
+  // Delete snapshots for this competitor's pins first
+  await db.delete(intelPinSnapshots).where(
+    sql`${intelPinSnapshots.pinId} IN (
+      SELECT ${intelPins.pinId} FROM ${intelPins}
+      WHERE ${intelPins.competitorId} = ${id}
+    )`
+  );
+
+  // Delete the competitor's pins
+  await db.delete(intelPins).where(eq(intelPins.competitorId, id));
+
+  // Delete the competitor
   const [deleted] = await db
     .delete(intelCompetitors)
     .where(eq(intelCompetitors.id, id))
