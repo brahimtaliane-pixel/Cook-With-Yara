@@ -6,7 +6,6 @@ import {
   enrichPinsViaWidget,
   computeVelocity,
   checkRepinStatus,
-  resolveRealPinDate,
 } from "@/lib/services/pinterest-intel";
 
 export async function POST(request: Request) {
@@ -39,15 +38,11 @@ export async function POST(request: Request) {
 
     const widgetData = enriched.get(pin.pinId);
     const saves = widgetData?.saves ?? 0;
-    const articleUrl = widgetData?.articleLink || pin.linkUrl || "";
-
-    // Resolve real publish date
-    const pinCreatedAt = await resolveRealPinDate(
-      widgetData?.datePublished ?? null,
-      widgetData?.createdAt ?? null,
-      articleUrl
-    );
-
+    const pinCreatedAt = widgetData?.createdAt
+      ? new Date(widgetData.createdAt)
+      : pin.publishedAt
+        ? new Date(pin.publishedAt)
+        : null;
     const velocity = computeVelocity(saves, pinCreatedAt);
 
     const [inserted] = await db

@@ -8,7 +8,6 @@ import {
   computeVelocity,
   isRecentPin,
   checkRepinStatus,
-  resolveRealPinDate,
   type EnrichedPin,
 } from "@/lib/services/pinterest-intel";
 import {
@@ -440,29 +439,10 @@ export async function refreshSingleCompetitor(competitorId: string): Promise<num
   // 3. Filter out repins
   const pinIds = enrichedPins.map((p) => p.pinId);
   const repinIds = await checkRepinStatus(pinIds);
-  const nonRepins = enrichedPins.filter((p) => !repinIds.has(p.pinId));
+  const filtered = enrichedPins.filter((p) => !repinIds.has(p.pinId));
 
   if (repinIds.size > 0) {
     console.log(`[intel-refresh] ${competitor.username}: filtered ${repinIds.size}/${enrichedPins.length} repins`);
-  }
-
-  // 4. Resolve real publish dates and recalculate velocity
-  const filtered: EnrichedPin[] = [];
-  for (const pin of nonRepins) {
-    const articleUrl = pin.linkUrl || "";
-    const realDate = await resolveRealPinDate(null, null, articleUrl);
-    if (realDate) {
-      pin.pinCreatedAt = realDate;
-      pin.velocity = computeVelocity(pin.saves, realDate);
-    }
-    // Only keep pins that are actually recent (30 days)
-    if (isRecentPin(pin.pinCreatedAt, 30)) {
-      filtered.push(pin);
-    }
-  }
-
-  if (nonRepins.length !== filtered.length) {
-    console.log(`[intel-refresh] ${competitor.username}: filtered ${nonRepins.length - filtered.length} old pins after real date check`);
   }
 
   const processed = await upsertEnrichedPins(
@@ -546,42 +526,31 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
 
       const now = new Date();
 
-      // Step 1: Filter out repins
-      const allIds = results.map((p) => p.pinId);
-      const repinIds = await checkRepinStatus(allIds);
+      // Filter out repins
+      const repinIds = await checkRepinStatus(pinIds);
       const nonRepins = results.filter((p) => !repinIds.has(p.pinId));
 
       if (repinIds.size > 0) {
         console.log(`[intel-trending] Filtered ${repinIds.size}/${results.length} repins`);
       }
 
-      // Step 2: Resolve real publish dates and build inserts
-      const inserts: {
-        pin: typeof nonRepins[0];
-        wd: ReturnType<typeof enriched.get>;
-        saves: number;
-        pinCreatedAt: Date | null;
-        velocity: number;
-        now: Date;
-      }[] = [];
+      const inserts = nonRepins
+        .map((pin) => {
+          const wd = enriched.get(pin.pinId);
+          const saves = wd?.saves ?? 0;
+          const pinCreatedAt = wd?.createdAt
+            ? new Date(wd.createdAt)
+            : pin.publishedAt
+              ? new Date(pin.publishedAt)
+              : null;
 
-      for (const pin of nonRepins) {
-        const wd = enriched.get(pin.pinId);
-        const saves = wd?.saves ?? 0;
+          if (!isRecentPin(pinCreatedAt, 30)) return null;
 
-        // Get real date: rich_metadata > scrape article > widget created_at
-        const articleUrl = wd?.articleLink || pin.linkUrl || "";
-        const pinCreatedAt = await resolveRealPinDate(
-          wd?.datePublished ?? null,
-          wd?.createdAt ?? null,
-          articleUrl
-        );
+          const velocity = computeVelocity(saves, pinCreatedAt);
 
-        if (!isRecentPin(pinCreatedAt, 30)) continue;
-
-        const velocity = computeVelocity(saves, pinCreatedAt);
-        inserts.push({ pin, wd, saves, pinCreatedAt, velocity, now });
-      }
+          return { pin, wd, saves, pinCreatedAt, velocity, now };
+        })
+        .filter((x): x is NonNullable<typeof x> => x !== null);
 
       for (let i = 0; i < inserts.length; i += DB_BATCH_SIZE) {
         const batch = inserts.slice(i, i + DB_BATCH_SIZE);
