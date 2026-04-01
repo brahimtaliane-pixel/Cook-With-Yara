@@ -431,22 +431,38 @@ export async function refreshSingleCompetitor(competitorId: string): Promise<num
   // 1. Snapshot current state BEFORE fetching new data
   await createSnapshots(competitorId);
 
-  // 2. Fetch and upsert new pin data
+  // 2. Fetch new pin data
   const enrichedPins = await scrapeCompetitorProfileViaApify(
     competitor.username,
     200
   );
 
+  // 3. Filter out repins and implausible saves
+  const pinIds = enrichedPins.map((p) => p.pinId);
+  const repinIds = await checkRepinStatus(pinIds);
+  const filtered = enrichedPins.filter((p) => {
+    if (repinIds.has(p.pinId)) return false;
+    if (!isSavesPlausible(p.saves, p.pinCreatedAt)) {
+      console.log(`[intel-refresh] Implausible: ${p.pinId} — ${p.saves} saves, created ${p.pinCreatedAt?.toISOString()}`);
+      return false;
+    }
+    return true;
+  });
+
+  if (enrichedPins.length !== filtered.length) {
+    console.log(`[intel-refresh] ${competitor.username}: filtered ${enrichedPins.length - filtered.length}/${enrichedPins.length} pins (repins/implausible)`);
+  }
+
   const processed = await upsertEnrichedPins(
-    enrichedPins,
+    filtered,
     competitor.id,
     "resource-api"
   );
 
-  // 3. Compute instant metrics from snapshots
+  // 4. Compute instant metrics from snapshots
   await computeInstantMetrics(competitorId);
 
-  // 4. Compute creator baselines
+  // 5. Compute creator baselines
   await computeCreatorBaselines(competitorId);
 
   await db
