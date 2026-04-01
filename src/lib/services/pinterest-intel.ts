@@ -215,8 +215,15 @@ const RESOURCE_API_MAX_PAGES = 20;
 interface ResourceApiPin {
   pinId: string;
   title: string;
+  description: string;
+  imageUrl: string;
   createdAt: string | null;
   domain: string;
+  saves: number;
+  repins: number;
+  creatorName: string;
+  creatorFollowers: number;
+  boardName: string;
 }
 
 async function getPinterestSession(username: string): Promise<{
@@ -259,7 +266,7 @@ async function fetchUserPinsPage(
 ): Promise<{ pins: ResourceApiPin[]; nextBookmark: string | null }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const options: Record<string, any> = {
-    field_set_key: "profile_grid_item",
+    field_set_key: "detailed",
     username,
     page_size: RESOURCE_API_PAGE_SIZE,
   };
@@ -303,13 +310,26 @@ async function fetchUserPinsPage(
   const pins: ResourceApiPin[] = [];
   for (const item of data) {
     const pinIdMatch = item.seo_url?.match(/\/pin\/(\d+)/);
-    const pinId = pinIdMatch?.[1];
+    const pinId = pinIdMatch?.[1] || (item.id ? String(item.id) : "");
     if (pinId) {
+      const aggregatedSaves = item.aggregated_pin_data?.aggregated_stats?.saves;
       pins.push({
         pinId,
-        title: item.seo_title || item.grid_title || "",
+        title: item.seo_title || item.grid_title || item.title || "",
+        description: item.description || item.closeup_description || "",
+        imageUrl:
+          item.images?.["564x"]?.url ??
+          item.images?.["236x"]?.url ??
+          item.images?.orig?.url ??
+          item.image_medium_url ??
+          "",
         createdAt: item.created_at || null,
-        domain: item.link_domain?.id || "",
+        domain: item.link_domain?.id || item.domain || "",
+        saves: aggregatedSaves ?? item.repin_count ?? 0,
+        repins: item.repin_count ?? 0,
+        creatorName: item.pinner?.full_name ?? "",
+        creatorFollowers: item.pinner?.follower_count ?? 0,
+        boardName: item.board?.name ?? "",
       });
     }
   }
@@ -370,41 +390,48 @@ export async function scrapeCompetitorProfileViaApify(
 
   if (recentPins.length === 0) return [];
 
-  // Enrich via Widget API to get saves, repins, board, creator info
+  // Try Widget API enrichment for additional data (saves, high-res images)
+  // but don't depend on it — Resource API already has most data
   const pinIds = recentPins.map((p) => p.pinId);
-  const widgetData = await enrichPinsViaWidget(pinIds);
+  let widgetData = new Map<string, WidgetPinData>();
+  try {
+    widgetData = await enrichPinsViaWidget(pinIds);
+  } catch (err) {
+    console.warn(`[pinterest-resource] Widget API enrichment failed, using Resource API data only:`, err);
+  }
 
-  // Build enriched pins
+  // Build enriched pins — prefer Resource API data, overlay Widget data when available
   const enriched: EnrichedPin[] = [];
   for (const pin of recentPins) {
     const wd = widgetData.get(pin.pinId);
-    const saves = wd?.saves ?? 0;
-    const pinCreatedAt = wd?.createdAt
-      ? new Date(wd.createdAt)
-      : pin.createdAt
-        ? new Date(pin.createdAt)
+    // Use whichever source has better data
+    const saves = Math.max(pin.saves, wd?.saves ?? 0);
+    const pinCreatedAt = pin.createdAt
+      ? new Date(pin.createdAt)
+      : wd?.createdAt
+        ? new Date(wd.createdAt)
         : null;
     const velocity = computeVelocity(saves, pinCreatedAt);
 
     enriched.push({
       pinId: pin.pinId,
-      title: wd?.title || pin.title,
-      description: wd?.description || "",
-      imageUrl: wd?.imageUrl || "",
+      title: pin.title || wd?.title || "",
+      description: pin.description || wd?.description || "",
+      imageUrl: pin.imageUrl || wd?.imageUrl || "",
       linkUrl: `https://www.pinterest.com/pin/${pin.pinId}/`,
       saves,
-      repins: wd?.repins ?? 0,
+      repins: Math.max(pin.repins, wd?.repins ?? 0),
       velocity,
-      creatorName: wd?.creatorName || username,
-      creatorFollowers: wd?.creatorFollowers ?? 0,
-      boardName: wd?.boardName || "",
-      domain: wd?.domain || pin.domain,
+      creatorName: pin.creatorName || wd?.creatorName || username,
+      creatorFollowers: Math.max(pin.creatorFollowers, wd?.creatorFollowers ?? 0),
+      boardName: pin.boardName || wd?.boardName || "",
+      domain: pin.domain || wd?.domain || "",
       pinCreatedAt,
     });
   }
 
   console.log(
-    `[pinterest-resource] @${username}: ${recentPins.length} recent pins enriched, ${enriched.filter((p) => p.saves > 0).length} with saves > 0`
+    `[pinterest-resource] @${username}: ${recentPins.length} recent pins, ${enriched.filter((p) => p.imageUrl).length} with images, ${enriched.filter((p) => p.saves > 0).length} with saves > 0`
   );
 
   return enriched;
