@@ -24,11 +24,30 @@ const NON_FOOD_DOMAINS = [
   "walmart.com", "depop.com", "etsy.com", "amazon.com", "ebay.com",
   "target.com", "aliexpress.com", "shein.com", "temu.com", "wish.com",
   "mercari.com", "poshmark.com", "redbubble.com", "society6.com",
+  "fivebelow.com",
+];
+
+// Terms that indicate a pin is NOT about food (toys, crafts, beauty, etc.)
+const NON_FOOD_TERMS = [
+  // Squishy toys (biggest polluter — "dumpling" keyword)
+  "squishy", "squishies", "squish", "squishmallow",
+  "fidget", "fidgets", "needoh", "nee doh",
+  "unboxing", "mystery box", "blind bag",
+  "five below", "fivebelow", "5 below",
+  "glitter dumpling", "galaxy dumpling", "tie dye dumpling",
+  // General non-food
+  "toy", "toys", "plush", "plushie", "stuffed animal",
+  "craft", "crafts", "diy decor", "crochet pattern",
+  "makeup", "skincare", "nail art", "hairstyle",
+  "outfit", "ootd", "fashion", "aesthetic room",
+  "workout", "exercise", "gym",
+  "tattoo", "piercing",
+  "#fyp", "#foryoupage", "#viral",
 ];
 
 /**
  * Check if a pin is food/recipe related based on its text content.
- * Returns true if the pin has food indicators and no blocklist hits.
+ * Must have food indicators AND no non-food poison terms.
  */
 function isFoodRelatedPin(pin: EnrichedPin): boolean {
   const text = `${pin.title} ${pin.description} ${pin.boardName}`.toLowerCase();
@@ -39,6 +58,9 @@ function isFoodRelatedPin(pin: EnrichedPin): boolean {
   // Reject if from a known non-food retail domain
   const domain = pin.domain.toLowerCase();
   if (NON_FOOD_DOMAINS.some((d) => domain.includes(d))) return false;
+
+  // Reject if non-food terms are present (squishy toys, crafts, etc.)
+  if (NON_FOOD_TERMS.some((term) => text.includes(term))) return false;
 
   // Accept if any food indicator is present
   return FOOD_INDICATORS.some((term) => text.includes(term));
