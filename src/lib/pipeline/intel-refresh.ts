@@ -12,10 +12,37 @@ import {
 import {
   TRENDING_RECIPE_QUERIES,
   INTEL_DEFAULTS,
+  FOOD_INDICATORS,
+  FOOD_BLOCKLIST,
 } from "@/lib/constants";
 
 // Batch size for parallel DB upserts
 const DB_BATCH_SIZE = 25;
+
+// Non-food domains that frequently pollute search results
+const NON_FOOD_DOMAINS = [
+  "walmart.com", "depop.com", "etsy.com", "amazon.com", "ebay.com",
+  "target.com", "aliexpress.com", "shein.com", "temu.com", "wish.com",
+  "mercari.com", "poshmark.com", "redbubble.com", "society6.com",
+];
+
+/**
+ * Check if a pin is food/recipe related based on its text content.
+ * Returns true if the pin has food indicators and no blocklist hits.
+ */
+function isFoodRelatedPin(pin: EnrichedPin): boolean {
+  const text = `${pin.title} ${pin.description} ${pin.boardName}`.toLowerCase();
+
+  // Reject if it matches the blocklist (non-halal)
+  if (FOOD_BLOCKLIST.some((term) => text.includes(term))) return false;
+
+  // Reject if from a known non-food retail domain
+  const domain = pin.domain.toLowerCase();
+  if (NON_FOOD_DOMAINS.some((d) => domain.includes(d))) return false;
+
+  // Accept if any food indicator is present
+  return FOOD_INDICATORS.some((term) => text.includes(term));
+}
 
 // === Snapshot Functions ===
 
@@ -534,8 +561,14 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
       }
 
       // Deduplicate: skip pins already seen in earlier queries
-      const newPins = pins.filter((p) => !seenPinIds.has(p.pinId));
-      for (const p of newPins) seenPinIds.add(p.pinId);
+      const dedupedPins = pins.filter((p) => !seenPinIds.has(p.pinId));
+      for (const p of dedupedPins) seenPinIds.add(p.pinId);
+
+      // Filter to food/recipe pins only (Trends keywords like "dumpling" match toys too)
+      const newPins = dedupedPins.filter(isFoodRelatedPin);
+      if (newPins.length < dedupedPins.length) {
+        console.log(`[intel-trending] "${query}": filtered ${dedupedPins.length - newPins.length}/${dedupedPins.length} non-food pins`);
+      }
 
       const now = new Date();
 
