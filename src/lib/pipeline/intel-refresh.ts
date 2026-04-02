@@ -566,7 +566,7 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
   if (trendingTopics.length > 0) {
     queries = trendingTopics
       .slice(0, INTEL_DEFAULTS.QUERIES_PER_REFRESH)
-      .map((t) => t.keyword);
+      .map((t) => t.keyword.includes("recipe") ? t.keyword : `${t.keyword} recipe`);
     console.log(`[intel-trending] Using ${queries.length} Pinterest Trends topics`);
   } else {
     const shuffled = [...TRENDING_RECIPE_QUERIES].sort(() => Math.random() - 0.5);
