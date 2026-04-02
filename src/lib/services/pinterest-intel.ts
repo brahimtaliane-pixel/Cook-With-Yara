@@ -1,6 +1,12 @@
 import { XMLParser } from "fast-xml-parser";
+import { getAccessToken } from "@/lib/services/pinterest";
 
 // === Types ===
+
+export interface TrendingTopic {
+  keyword: string;
+  growth: number;
+}
 
 export interface RssPin {
   pinId: string;
@@ -578,6 +584,53 @@ export async function checkRepinStatus(
   return repinIds;
 }
 
+
+// === Pinterest Trends API ===
+
+/**
+ * Fetch trending food & drink topics from the Pinterest Trends API.
+ * Returns keywords sorted by week-over-week growth (descending).
+ * On any failure, returns an empty array so callers can fall back to static queries.
+ */
+export async function fetchTrendingTopics(): Promise<TrendingTopic[]> {
+  try {
+    const token = await getAccessToken();
+    const url = new URL("https://api.pinterest.com/v5/trends/keywords/US/top/growing");
+    url.searchParams.set("interests", "food_and_drinks");
+    url.searchParams.set("limit", "50");
+
+    const res = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[intel-trending] Pinterest Trends API error ${res.status}: ${body}`);
+      return [];
+    }
+
+    const data = (await res.json()) as {
+      trends: Array<{
+        keyword: string;
+        pct_growth_wow: number;
+        pct_growth_mom: number;
+        pct_growth_yoy: number;
+      }>;
+    };
+
+    if (!data.trends || !Array.isArray(data.trends)) return [];
+
+    return data.trends
+      .map((t) => ({ keyword: t.keyword, growth: t.pct_growth_wow }))
+      .sort((a, b) => b.growth - a.growth);
+  } catch (err) {
+    console.error("[intel-trending] Failed to fetch Pinterest Trends:", err);
+    return [];
+  }
+}
 
 // === URL Parsing ===
 

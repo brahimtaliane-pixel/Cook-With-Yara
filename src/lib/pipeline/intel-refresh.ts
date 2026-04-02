@@ -8,6 +8,7 @@ import {
   computeVelocity,
   isRecentPin,
   checkRepinStatus,
+  fetchTrendingTopics,
   type EnrichedPin,
 } from "@/lib/services/pinterest-intel";
 import {
@@ -509,8 +510,20 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
   // 1. Snapshot existing trending pins BEFORE fetching new data
   await createTrendingSnapshots();
 
-  const shuffled = [...TRENDING_RECIPE_QUERIES].sort(() => Math.random() - 0.5);
-  const queries = shuffled.slice(0, INTEL_DEFAULTS.QUERIES_PER_REFRESH);
+  // 2. Try Pinterest Trends API for dynamic queries, fall back to static list
+  const trendingTopics = await fetchTrendingTopics();
+
+  let queries: string[];
+  if (trendingTopics.length > 0) {
+    queries = trendingTopics
+      .slice(0, INTEL_DEFAULTS.QUERIES_PER_REFRESH)
+      .map((t) => t.keyword);
+    console.log(`[intel-trending] Using ${queries.length} Pinterest Trends topics`);
+  } else {
+    const shuffled = [...TRENDING_RECIPE_QUERIES].sort(() => Math.random() - 0.5);
+    queries = shuffled.slice(0, INTEL_DEFAULTS.QUERIES_PER_REFRESH);
+    console.log(`[intel-trending] Falling back to static queries`);
+  }
 
   for (const query of queries) {
     try {
