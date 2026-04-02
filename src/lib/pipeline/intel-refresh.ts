@@ -24,30 +24,28 @@ const NON_FOOD_DOMAINS = [
   "walmart.com", "depop.com", "etsy.com", "amazon.com", "ebay.com",
   "target.com", "aliexpress.com", "shein.com", "temu.com", "wish.com",
   "mercari.com", "poshmark.com", "redbubble.com", "society6.com",
-  "fivebelow.com",
 ];
 
-// Terms that indicate a pin is NOT about food (toys, crafts, beauty, etc.)
+// Terms that indicate a non-food pin (toys, crafts, fashion, etc.)
+// If ANY of these appear, the pin is rejected unless it has a strong food signal
 const NON_FOOD_TERMS = [
-  // Squishy toys (biggest polluter — "dumpling" keyword)
-  "squishy", "squishies", "squish", "squishmallow",
-  "fidget", "fidgets", "needoh", "nee doh",
-  "unboxing", "mystery box", "blind bag",
-  "five below", "fivebelow", "5 below",
-  "glitter dumpling", "galaxy dumpling", "tie dye dumpling",
-  // General non-food
-  "toy", "toys", "plush", "plushie", "stuffed animal",
-  "craft", "crafts", "diy decor", "crochet pattern",
-  "makeup", "skincare", "nail art", "hairstyle",
-  "outfit", "ootd", "fashion", "aesthetic room",
-  "workout", "exercise", "gym",
-  "tattoo", "piercing",
-  "#fyp", "#foryoupage", "#viral",
+  "squishy", "squishies", "fidget", "toy", "toys", "needoh", "unboxing",
+  "gift wish", "wish list", "mystery box", "five below", "fivebelow",
+  "learning express", "blind bag", "glitter dumpling", "plastic",
+  "crochet", "amigurumi", "keychain", "earring", "jewelry", "nail art",
+  "outfit", "ootd", "haul", "room decor", "wallpaper", "aesthetic room",
+];
+
+// Strong food signals that override non-food term matches
+const STRONG_FOOD_SIGNALS = [
+  "recipe", "recipes", "cook", "cooking", "bake", "baking",
+  "ingredient", "tablespoon", "teaspoon", "preheat", "oven",
+  "minutes", "serve", "servings", "calories", "prep time",
 ];
 
 /**
  * Check if a pin is food/recipe related based on its text content.
- * Must have food indicators AND no non-food poison terms.
+ * Returns true if the pin has food indicators and no blocklist hits.
  */
 function isFoodRelatedPin(pin: EnrichedPin): boolean {
   const text = `${pin.title} ${pin.description} ${pin.boardName}`.toLowerCase();
@@ -59,11 +57,20 @@ function isFoodRelatedPin(pin: EnrichedPin): boolean {
   const domain = pin.domain.toLowerCase();
   if (NON_FOOD_DOMAINS.some((d) => domain.includes(d))) return false;
 
-  // Reject if non-food terms are present (squishy toys, crafts, etc.)
-  if (NON_FOOD_TERMS.some((term) => text.includes(term))) return false;
+  // If non-food terms are present, only allow if there's a strong food signal
+  const hasNonFoodTerm = NON_FOOD_TERMS.some((term) => text.includes(term));
+  if (hasNonFoodTerm) {
+    return STRONG_FOOD_SIGNALS.some((term) => text.includes(term));
+  }
 
-  // Accept if any food indicator is present
-  return FOOD_INDICATORS.some((term) => text.includes(term));
+  // Count how many food indicators match
+  const foodHits = FOOD_INDICATORS.filter((term) => text.includes(term)).length;
+
+  // Pins with no source domain (user uploads) are often crafts/toys — require 2+ food hits
+  const isUserUpload = !pin.domain || pin.domain === "";
+  if (isUserUpload && foodHits < 2) return false;
+
+  return foodHits > 0;
 }
 
 // === Snapshot Functions ===
