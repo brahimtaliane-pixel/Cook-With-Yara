@@ -30,10 +30,11 @@ const NON_FOOD_DOMAINS = [
 // If ANY of these appear, the pin is rejected unless it has a strong food signal
 const NON_FOOD_TERMS = [
   "squishy", "squishies", "fidget", "toy", "toys", "needoh", "unboxing",
-  "gift wish", "wish list", "mystery box", "five below", "fivebelow",
-  "learning express", "blind bag", "glitter dumpling", "plastic",
+  "gift wish", "wish list", "mystery box", "five below", "5 below", "fivebelow",
+  "learning express", "blind bag", "glitter dumpling", "plastic orb",
   "crochet", "amigurumi", "keychain", "earring", "jewelry", "nail art",
   "outfit", "ootd", "haul", "room decor", "wallpaper", "aesthetic room",
+  "hunting these", "i got all", "collection", "rare find",
 ];
 
 // Strong food signals that override non-food term matches
@@ -66,8 +67,8 @@ function isFoodRelatedPin(pin: EnrichedPin): boolean {
   // Count how many food indicators match
   const foodHits = FOOD_INDICATORS.filter((term) => text.includes(term)).length;
 
-  // Pins with no source domain (user uploads) are often crafts/toys — require 2+ food hits
-  const isUserUpload = !pin.domain || pin.domain === "";
+  // Pins with no real source domain (user uploads) are often crafts/toys — require 2+ food hits
+  const isUserUpload = !pin.domain || pin.domain === "" || pin.domain.toLowerCase() === "uploaded by user";
   if (isUserUpload && foodHits < 2) return false;
 
   return foodHits > 0;
