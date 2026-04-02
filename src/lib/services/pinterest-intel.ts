@@ -193,16 +193,19 @@ export async function searchPinterestViaApify(
   return items.map((item) => {
     const url = item.url || "";
     const pinId = item.id ? String(item.id) : extractPinIdFromUrl(url) || "";
-    const imageUrl =
+    // Apify often only returns 236x — upgrade to 564x for better quality
+    const rawImageUrl =
       item.images?.["564x"]?.url ??
       item.images?.orig?.url ??
+      item.images?.["236x"]?.url ??
       item.image_medium_url ??
       "";
+    const imageUrl = rawImageUrl.replace("/236x/", "/564x/");
 
     return {
       pinId,
       title: item.title || item.grid_title || item.seo_title || "",
-      description: item.description || item.seo_description || "",
+      description: item.description || item.closeup_description || item.seo_description || "",
       imageUrl,
       linkUrl: url,
       publishedAt: item.created_at || null,
@@ -453,11 +456,13 @@ export function parseApifyItems(items: any[]): EnrichedPin[] {
       const pinId = item.id ? String(item.id) : extractPinIdFromUrl(url) || "";
       if (!pinId) return null;
 
-      const imageUrl =
+      const rawImg =
         item.images?.["564x"]?.url ??
         item.images?.orig?.url ??
+        item.images?.["236x"]?.url ??
         item.image_medium_url ??
         "";
+      const imageUrl = rawImg.replace("/236x/", "/564x/");
 
       const aggregatedSaves = item.aggregated_pin_data?.aggregated_stats?.saves;
       const saves = aggregatedSaves ?? item.repin_count ?? 0;
