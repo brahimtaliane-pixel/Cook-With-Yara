@@ -35,7 +35,7 @@ export async function GET() {
   });
 
   const redirectUri = `${siteUrl}/api/auth/pinterest/callback`;
-  const scopes = "boards:read,boards:write,pins:read,pins:write,user_accounts:read";
+  const scopes = "boards:read,boards:read_secret,boards:write,pins:read,pins:read_secret,pins:write,user_accounts:read";
 
   const authUrl = new URL("https://www.pinterest.com/oauth/");
   authUrl.searchParams.set("response_type", "code");
