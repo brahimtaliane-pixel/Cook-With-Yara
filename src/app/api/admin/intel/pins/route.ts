@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { intelPins, intelCompetitors, articles } from "@/lib/db/schema";
-import { eq, desc, gte, and, isNotNull, count, type SQL } from "drizzle-orm";
+import { eq, desc, gte, and, isNotNull, isNull, count, type SQL } from "drizzle-orm";
 import { computePinScore } from "@/lib/services/intel-scoring";
 import { generateSlug } from "@/lib/utils/slug";
 
@@ -20,6 +20,9 @@ export async function GET(request: Request) {
 
   if (competitorId) {
     conditions.push(eq(intelPins.competitorId, competitorId));
+  } else if (!source) {
+    // Default: show only trending/search/lookup pins, not competitor scrapes
+    conditions.push(isNull(intelPins.competitorId));
   }
   if (source) {
     conditions.push(eq(intelPins.source, source));
