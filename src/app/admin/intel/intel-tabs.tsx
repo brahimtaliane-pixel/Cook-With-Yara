@@ -135,6 +135,7 @@ export function IntelTabs({ competitors, trendingPins, stats }: IntelTabsProps) 
     setRefreshingTrending(true);
     try {
       await fetch("/api/admin/intel/refresh", { method: "POST" });
+      await fetchTrending({ ...localFilters, period });
       router.refresh();
     } finally {
       setRefreshingTrending(false);
