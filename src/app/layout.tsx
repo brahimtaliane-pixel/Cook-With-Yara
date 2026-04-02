@@ -29,6 +29,12 @@ export const metadata: Metadata = {
     siteName: "Cook with Lucia",
     type: "website",
   },
+  twitter: {
+    card: "summary_large_image",
+  },
+  alternates: {
+    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com",
+  },
   verification: {
     other: {
       "p:domain_verify": ["5d0feaa50c34388ae5ccac30cdf8eee5"],

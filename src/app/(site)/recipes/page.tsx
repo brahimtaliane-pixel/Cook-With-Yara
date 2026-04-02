@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { ArticleStatus } from "@/lib/constants";
 import { RecipeCard } from "@/components/recipe-card";
 import type { Article } from "@/lib/db/schema";
+import { generateItemListJsonLd } from "@/lib/utils/seo";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,9 @@ export const metadata: Metadata = {
   title: "All Recipes",
   description:
     "Browse all of Lucia's delicious recipes. Find your next favorite meal — from quick weeknight dinners to impressive desserts.",
+  alternates: {
+    canonical: "https://cookwithlucia.com/recipes",
+  },
 };
 
 const categoryFilters = [
@@ -66,8 +70,16 @@ export default async function RecipesPage({ searchParams }: Props) {
           );
         });
 
+  const itemListJsonLd = generateItemListJsonLd(
+    allRecipes.map((r) => ({ title: r.title, slug: r.slug, heroImageUrl: r.heroImageUrl }))
+  );
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+      />
       {/* Page header */}
       <div className="border-b bg-warm grain relative overflow-hidden">
         <div className="relative z-10 mx-auto max-w-7xl px-6 py-14 sm:py-20">

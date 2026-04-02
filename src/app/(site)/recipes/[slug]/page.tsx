@@ -8,6 +8,7 @@ import { ArticleStatus } from "@/lib/constants";
 import {
   generateArticleMetadata,
   generateRecipeJsonLd,
+  generateBreadcrumbJsonLd,
 } from "@/lib/utils/seo";
 import { RecipeContent } from "@/components/recipe-content";
 import { RecipeCard } from "@/components/recipe-card";
@@ -125,6 +126,7 @@ export default async function RecipePage({ params }: Props) {
       : []),
     { label: article.title || "Recipe" },
   ];
+  const breadcrumbJsonLd = generateBreadcrumbJsonLd(breadcrumbItems);
 
   const moreRecipes = await db
     .select()
@@ -143,6 +145,10 @@ export default async function RecipePage({ params }: Props) {
           dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaJsonLd) }}
         />
       )}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
 
       {/* ── Hero image ── */}
       {article.heroImageUrl && (

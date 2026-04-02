@@ -36,7 +36,7 @@ export function getCanonicalUrl(slug: string): string {
 
 export function generateArticleMetadata(article: Article) {
   return {
-    title: `${article.title} | ${SITE_NAME}`,
+    title: article.title || "",
     description: article.metaDescription || "",
     openGraph: {
       title: article.title || "",
@@ -106,5 +106,39 @@ export function generateWebsiteJsonLd() {
     url: SITE_URL,
     description:
       "Discover trending recipes, cooking tips, and delicious meal ideas with Lucia.",
+  };
+}
+
+export function generateBreadcrumbJsonLd(
+  items: { label: string; href?: string }[]
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      ...items.map((item, i) => ({
+        "@type": "ListItem" as const,
+        position: i + 2,
+        name: item.label,
+        ...(item.href ? { item: `${SITE_URL}${item.href}` } : {}),
+      })),
+    ],
+  };
+}
+
+export function generateItemListJsonLd(
+  recipes: { title: string | null; slug: string; heroImageUrl: string | null }[]
+) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    itemListElement: recipes.map((r, i) => ({
+      "@type": "ListItem" as const,
+      position: i + 1,
+      url: `${SITE_URL}/recipes/${r.slug}`,
+      name: r.title || r.slug,
+      ...(r.heroImageUrl ? { image: r.heroImageUrl } : {}),
+    })),
   };
 }

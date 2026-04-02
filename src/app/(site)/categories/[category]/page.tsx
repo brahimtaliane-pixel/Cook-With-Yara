@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { ArticleStatus } from "@/lib/constants";
 import { RecipeCard } from "@/components/recipe-card";
 import { Breadcrumbs } from "@/components/breadcrumbs";
+import { generateBreadcrumbJsonLd, generateItemListJsonLd } from "@/lib/utils/seo";
 import type { Article } from "@/lib/db/schema";
 import type { Metadata } from "next";
 
@@ -69,6 +70,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description:
       meta?.description ||
       `Browse delicious ${label.toLowerCase()} recipes from Cook with Lucia.`,
+    alternates: {
+      canonical: `https://cookwithlucia.com/categories/${category}`,
+    },
   };
 }
 
@@ -89,8 +93,24 @@ export default async function CategoryPage({ params }: Props) {
     return cat.toLowerCase().replace(/\s+/g, "-") === category.toLowerCase();
   });
 
+  const breadcrumbJsonLd = generateBreadcrumbJsonLd([
+    { label: "Recipes", href: "/recipes" },
+    { label: `${label} Recipes` },
+  ]);
+  const itemListJsonLd = generateItemListJsonLd(
+    filtered.map((r) => ({ title: r.title, slug: r.slug, heroImageUrl: r.heroImageUrl }))
+  );
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+      />
       {/* Breadcrumbs */}
       <div className="border-b bg-background print:hidden">
         <div className="mx-auto max-w-7xl px-6 py-3">
