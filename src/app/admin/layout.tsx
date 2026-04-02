@@ -26,7 +26,7 @@ export default function AdminLayout({
 }) {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)]">
-      <aside className="w-56 shrink-0 border-r bg-muted/30">
+      <aside className="sticky top-0 h-screen w-56 shrink-0 overflow-y-auto border-r bg-muted/30">
         <div className="px-4 py-6">
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Admin Panel
