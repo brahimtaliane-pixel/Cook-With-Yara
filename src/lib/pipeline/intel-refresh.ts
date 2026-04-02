@@ -2,11 +2,9 @@ import { db } from "@/lib/db";
 import { intelCompetitors, intelPins, intelPinSnapshots } from "@/lib/db/schema";
 import { eq, desc, avg, lt, inArray, isNull } from "drizzle-orm";
 import {
-  enrichPinsViaWidget,
   scrapeCompetitorProfileViaApify,
-  searchPinterestViaApify,
+  searchPinterestNative,
   computeVelocity,
-  isRecentPin,
   checkRepinStatus,
   fetchTrendingTopics,
   type EnrichedPin,
@@ -499,18 +497,12 @@ export async function refreshAllCompetitors(): Promise<{ processed: number }> {
 // === Trending pins refresh ===
 
 export async function refreshTrendingPins(): Promise<{ processed: number }> {
-  const token = process.env.APIFY_TOKEN;
-  if (!token) {
-    console.log("[intel-trending] APIFY_TOKEN not set, skipping trending refresh");
-    return { processed: 0 };
-  }
-
   let totalProcessed = 0;
 
   // 1. Snapshot existing trending pins BEFORE fetching new data
   await createTrendingSnapshots();
 
-  // 2. Try Pinterest Trends API for dynamic queries, fall back to static list
+  // 2. Get queries: Pinterest Trends API → fallback to static list
   const trendingTopics = await fetchTrendingTopics();
 
   let queries: string[];
@@ -525,97 +517,85 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
     console.log(`[intel-trending] Falling back to static queries`);
   }
 
+  // Deduplicate across queries — same pin can appear in multiple searches
+  const seenPinIds = new Set<string>();
+
+  // 3. Search + enrich via native Pinterest APIs (no Apify)
   for (const query of queries) {
     try {
-      const results = await searchPinterestViaApify(
+      const pins = await searchPinterestNative(
         query,
-        INTEL_DEFAULTS.TRENDING_PINS_PER_QUERY
+        INTEL_DEFAULTS.TRENDING_PINS_PER_QUERY,
       );
 
-      if (results.length === 0) continue;
+      if (pins.length === 0) {
+        console.log(`[intel-trending] No results for "${query}"`);
+        continue;
+      }
 
-      const pinIds = results.map((p) => p.pinId);
-      const enriched = await enrichPinsViaWidget(pinIds);
+      // Deduplicate: skip pins already seen in earlier queries
+      const newPins = pins.filter((p) => !seenPinIds.has(p.pinId));
+      for (const p of newPins) seenPinIds.add(p.pinId);
 
       const now = new Date();
 
-      // Filter out repins
-      const repinIds = await checkRepinStatus(pinIds);
-      const nonRepins = results.filter((p) => !repinIds.has(p.pinId));
-
-      if (repinIds.size > 0) {
-        console.log(`[intel-trending] Filtered ${repinIds.size}/${results.length} repins`);
-      }
-
-      const inserts = nonRepins
-        .map((pin) => {
-          const wd = enriched.get(pin.pinId);
-          const saves = wd?.saves ?? 0;
-          const pinCreatedAt = wd?.createdAt
-            ? new Date(wd.createdAt)
-            : pin.publishedAt
-              ? new Date(pin.publishedAt)
-              : null;
-
-          if (!isRecentPin(pinCreatedAt, 30)) return null;
-
-          const velocity = computeVelocity(saves, pinCreatedAt);
-
-          return { pin, wd, saves, pinCreatedAt, velocity, now };
-        })
-        .filter((x): x is NonNullable<typeof x> => x !== null);
-
-      for (let i = 0; i < inserts.length; i += DB_BATCH_SIZE) {
-        const batch = inserts.slice(i, i + DB_BATCH_SIZE);
+      // Upsert to DB
+      for (let i = 0; i < newPins.length; i += DB_BATCH_SIZE) {
+        const batch = newPins.slice(i, i + DB_BATCH_SIZE);
         await Promise.all(
-          batch.map(({ pin, wd, saves, pinCreatedAt, velocity, now: n }) =>
+          batch.map((pin) =>
             db
               .insert(intelPins)
               .values({
                 pinId: pin.pinId,
-                title: wd?.title || pin.title,
-                description: wd?.description || pin.description,
-                imageUrl: wd?.imageUrl || pin.imageUrl,
+                title: pin.title,
+                description: pin.description,
+                imageUrl: pin.imageUrl,
                 linkUrl: pin.linkUrl,
-                domain: wd?.domain || "",
-                saves,
-                repins: wd?.repins ?? 0,
-                velocity,
-                creatorName: wd?.creatorName || "",
-                creatorFollowers: wd?.creatorFollowers ?? 0,
-                boardName: wd?.boardName || "",
-                pinCreatedAt,
+                domain: pin.domain,
+                saves: pin.saves,
+                repins: pin.repins,
+                velocity: pin.velocity,
+                creatorName: pin.creatorName,
+                creatorFollowers: pin.creatorFollowers,
+                boardName: pin.boardName,
+                pinCreatedAt: pin.pinCreatedAt,
                 source: "trending",
-                lastEnrichedAt: wd ? n : null,
+                lastEnrichedAt: now,
               })
               .onConflictDoUpdate({
                 target: intelPins.pinId,
                 set: {
-                  title: wd?.title || pin.title,
-                  description: wd?.description || pin.description,
-                  imageUrl: wd?.imageUrl || pin.imageUrl,
-                  saves,
-                  repins: wd?.repins ?? 0,
-                  velocity,
-                  creatorName: wd?.creatorName || "",
-                  creatorFollowers: wd?.creatorFollowers ?? 0,
-                  boardName: wd?.boardName || "",
-                  domain: wd?.domain || "",
+                  title: pin.title,
+                  description: pin.description,
+                  imageUrl: pin.imageUrl,
+                  saves: pin.saves,
+                  repins: pin.repins,
+                  velocity: pin.velocity,
+                  creatorName: pin.creatorName,
+                  creatorFollowers: pin.creatorFollowers,
+                  boardName: pin.boardName,
+                  domain: pin.domain,
                   source: "trending",
-                  lastEnrichedAt: wd ? n : null,
-                  updatedAt: n,
+                  lastEnrichedAt: now,
+                  updatedAt: now,
                 },
-              })
-          )
+              }),
+          ),
         );
         totalProcessed += batch.length;
       }
+
+      const topSaves = newPins.slice(0, 3).map((p) => p.saves);
+      console.log(
+        `[intel-trending] "${query}": ${newPins.length} pins stored (top saves: ${topSaves.join(", ")})`,
+      );
     } catch (error) {
       console.error(`[intel-trending] Failed for query "${query}":`, error);
     }
   }
 
-  // 2. Compute instant metrics for trending pins after all upserts
+  // 4. Compute instant metrics for trending pins after all upserts
   await computeTrendingInstantMetrics();
 
   return { processed: totalProcessed };

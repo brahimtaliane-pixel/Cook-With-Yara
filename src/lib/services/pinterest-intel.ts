@@ -213,6 +213,190 @@ export async function searchPinterestViaApify(
   }).filter((p: RssPin) => p.pinId);
 }
 
+// === Native Pinterest Search (Resource API — replaces Apify for trending) ===
+// Free, no auth needed, returns pins ranked by Pinterest's algorithm.
+// Uses BaseSearchResource for discovery + Widget API for engagement data.
+
+const SEARCH_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+interface SearchSession {
+  cookies: string;
+  csrfToken: string;
+}
+
+async function getSearchSession(): Promise<SearchSession | null> {
+  const res = await fetch("https://www.pinterest.com/", {
+    headers: { "User-Agent": SEARCH_UA, Accept: "text/html" },
+  });
+  if (!res.ok) return null;
+  await res.text();
+
+  const setCookies = res.headers.getSetCookie?.() || [];
+  const cookies = setCookies.map((c) => c.split(";")[0]).join("; ");
+  const csrfMatch = cookies.match(/csrftoken=([a-f0-9]+)/);
+  if (!csrfMatch?.[1]) return null;
+  return { cookies, csrfToken: csrfMatch[1] };
+}
+
+async function searchResourceApi(
+  query: string,
+  session: SearchSession,
+  pageSize = 25,
+  bookmark: string | null = null,
+): Promise<{
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  pins: any[];
+  nextBookmark: string | null;
+}> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const options: Record<string, any> = {
+    query,
+    scope: "pins",
+    auto_correction_disabled: false,
+    page_size: pageSize,
+    field_set_key: "detailed",
+  };
+  if (bookmark) options.bookmarks = [bookmark];
+
+  const formData = new URLSearchParams();
+  formData.set(
+    "source_url",
+    `/search/pins/?q=${encodeURIComponent(query)}`,
+  );
+  formData.set("data", JSON.stringify({ options, context: {} }));
+
+  const res = await fetch(
+    "https://www.pinterest.com/resource/BaseSearchResource/get/",
+    {
+      method: "POST",
+      headers: {
+        "User-Agent": SEARCH_UA,
+        Accept: "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CSRFToken": session.csrfToken,
+        "X-Pinterest-AppState": "active",
+        Cookie: session.cookies,
+        Referer: `https://www.pinterest.com/search/pins/?q=${encodeURIComponent(query)}`,
+      },
+      body: formData.toString(),
+    },
+  );
+
+  if (!res.ok) return { pins: [], nextBookmark: null };
+
+  const json = await res.json();
+  const data = json.resource_response?.data;
+  const results = Array.isArray(data) ? data : data?.results || [];
+  const bm = json.resource_response?.bookmark ?? null;
+
+  const pins = results.filter(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (item: any) => item.id && (!item.type || item.type === "pin"),
+  );
+
+  return { pins, nextBookmark: bm === "-end-" ? null : bm };
+}
+
+/**
+ * Search Pinterest natively via the Resource API + Widget API enrichment.
+ * Free, no Apify needed. Returns enriched pins sorted by saves (descending).
+ *
+ * @param query   Search query
+ * @param limit   Max pins to return (paginates automatically, 25 pins per page)
+ */
+export async function searchPinterestNative(
+  query: string,
+  limit = 25,
+): Promise<EnrichedPin[]> {
+  const session = await getSearchSession();
+  if (!session) {
+    console.error("[pinterest-search] Failed to get session");
+    return [];
+  }
+
+  // Fetch enough pages to fill the limit (25 pins per page)
+  const maxPages = Math.ceil(limit / 25);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allRaw: any[] = [];
+  let bookmark: string | null = null;
+
+  for (let page = 0; page < maxPages; page++) {
+    const { pins, nextBookmark } = await searchResourceApi(
+      query,
+      session,
+      25,
+      bookmark,
+    );
+    allRaw.push(...pins);
+    bookmark = nextBookmark;
+    if (!bookmark) break;
+  }
+
+  if (allRaw.length === 0) return [];
+
+  // Parse raw pins (images, metadata)
+  const parsed = allRaw.map((item) => ({
+    pinId: String(item.id),
+    title:
+      item.grid_title || item.title || item.seo_title || "",
+    description:
+      item.description || item.closeup_description || "",
+    imageUrl:
+      item.images?.["736x"]?.url ??
+      item.images?.orig?.url ??
+      item.images?.["564x"]?.url ??
+      item.images?.["474x"]?.url ??
+      item.images?.["236x"]?.url ??
+      "",
+    linkUrl: item.link || `https://www.pinterest.com/pin/${item.id}/`,
+    domain: item.domain || item.link_domain?.id || "",
+    createdAt: item.created_at || null,
+    creatorName: item.pinner?.full_name || "",
+    creatorFollowers: item.pinner?.follower_count || 0,
+    boardName: item.board?.name || "",
+  }));
+
+  // Enrich with engagement data via Widget API (batch, fast)
+  const pinIds = parsed.map((p) => p.pinId);
+  const widgetData = await enrichPinsViaWidget(pinIds);
+
+  // Build enriched pins
+  const enriched: EnrichedPin[] = [];
+  for (const pin of parsed) {
+    const wd = widgetData.get(pin.pinId);
+    const saves = wd?.saves ?? 0;
+    const repins = wd?.repins ?? 0;
+    const pinCreatedAt = pin.createdAt ? new Date(pin.createdAt) : null;
+    const velocity = computeVelocity(saves, pinCreatedAt);
+
+    enriched.push({
+      pinId: pin.pinId,
+      title: pin.title || wd?.title || "",
+      description: pin.description || wd?.description || "",
+      imageUrl: pin.imageUrl || wd?.imageUrl || "",
+      linkUrl: pin.linkUrl,
+      saves,
+      repins,
+      velocity,
+      creatorName: pin.creatorName || wd?.creatorName || "",
+      creatorFollowers: Math.max(
+        pin.creatorFollowers,
+        wd?.creatorFollowers ?? 0,
+      ),
+      boardName: pin.boardName || wd?.boardName || "",
+      domain: pin.domain || wd?.domain || "",
+      pinCreatedAt,
+    });
+  }
+
+  // Sort by saves descending — surface the best pins first
+  enriched.sort((a, b) => b.saves - a.saves);
+
+  return enriched.slice(0, limit);
+}
+
 // === Deep Competitor Scrape (Pinterest Resource API) ===
 // Uses Pinterest's internal UserPinsResource API with pagination.
 // Free, fast, and returns ALL of a user's pins in reverse chronological order.
