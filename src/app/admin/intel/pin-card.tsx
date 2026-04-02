@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SendToPipelineButton } from "./send-to-pipeline-button";
-import { Bookmark, Repeat2, User, LayoutGrid, Globe, Check, TrendingUp, TrendingDown, Sparkles } from "lucide-react";
+import { Bookmark, Repeat2, User, LayoutGrid, Globe, Check, TrendingUp, TrendingDown, Sparkles, ExternalLink } from "lucide-react";
 import type { PinData } from "./intel-tabs";
 
 function getScoreBadgeStyle(tierColor: string) {
@@ -234,6 +234,16 @@ export function PinCard({ pin, compact = false, maxVelocity = 0 }: PinCardProps)
                 )}
               </span>
             )}
+            <a
+              href={`https://www.pinterest.com/pin/${pin.pinId}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-0.5 hover:underline"
+              title="View on Pinterest"
+            >
+              <ExternalLink className="size-3" />
+              Pin
+            </a>
             <span>{daysAgo(pin.pinCreatedAt)}</span>
           </div>
           {!compact && (
