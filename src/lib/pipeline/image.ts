@@ -77,7 +77,7 @@ export async function pollImages(): Promise<{ processed: number }> {
     .select()
     .from(articles)
     .where(eq(articles.status, ArticleStatus.IMAGE_GENERATING))
-    .limit(10);
+    .limit(20);
 
   let processed = 0;
 
