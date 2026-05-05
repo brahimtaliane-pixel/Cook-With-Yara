@@ -30,15 +30,15 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur-xl">
-      <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6">
+      <div className="mx-auto flex h-18 max-w-7xl items-center justify-between px-6 sm:h-20">
         {/* Logo */}
-        <Link href="/" className="block shrink-0">
+        <Link href="/" className="block shrink-0" aria-label="Cook with Yara — Home">
           <Image
-            src="/mylogo.png"
-            alt="Cook with Lucia"
-            width={180}
-            height={45}
-            className="h-10 w-auto"
+            src="/logo.png"
+            alt="Cook with Yara"
+            width={540}
+            height={160}
+            className="h-12 w-auto sm:h-14"
             priority
           />
         </Link>

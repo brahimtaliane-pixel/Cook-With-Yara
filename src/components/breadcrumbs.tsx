@@ -50,7 +50,7 @@ export function Breadcrumbs({ items }: { items: BreadcrumbItem[] }) {
               name: item.label,
               ...(item.href && i < allItems.length - 1
                 ? {
-                    item: `${process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com"}${item.href}`,
+                    item: `${process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com"}${item.href}`,
                   }
                 : {}),
             })),

@@ -37,10 +37,10 @@ async function main() {
   const { data, error } = await resend.emails.send({
     from,
     to,
-    subject: "[CookWithLucia] Test Alert - Setup Verification",
+    subject: "[CookWithYara] Test Alert - Setup Verification",
     html: `
       <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2>Cook With Lucia - Alert System Test</h2>
+        <h2>Cook with Yara - Alert System Test</h2>
         <p>If you're reading this, your Resend email integration is working correctly!</p>
         <hr />
         <p style="color: #666; font-size: 14px;">

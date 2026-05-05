@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Terms of Service",
-  description: "Terms of service for Cook with Lucia.",
+  description: "Terms of service for Cook with Yara.",
 };
 
 export default function TermsPage() {
@@ -18,7 +18,7 @@ export default function TermsPage() {
       <div className="prose prose-neutral max-w-none space-y-6 [&_h2]:font-display [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:mt-10 [&_h2]:mb-4 [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_ul]:text-muted-foreground [&_li]:leading-relaxed">
         <h2>Acceptance of Terms</h2>
         <p>
-          By accessing and using cookwithlucia.com (&quot;the Website&quot;),
+          By accessing and using cookwithyara.com (&quot;the Website&quot;),
           you agree to be bound by these Terms of Service. If you do not agree
           to these terms, please do not use the Website.
         </p>
@@ -26,7 +26,7 @@ export default function TermsPage() {
         <h2>Use of Content</h2>
         <p>
           All recipes, articles, images, and other content on the Website are
-          owned by Cook with Lucia unless otherwise stated. You may:
+          owned by Cook with Yara unless otherwise stated. You may:
         </p>
         <ul className="list-disc pl-6 space-y-2">
           <li>View and print content for personal, non-commercial use</li>
@@ -70,7 +70,7 @@ export default function TermsPage() {
 
         <h2>Limitation of Liability</h2>
         <p>
-          Cook with Lucia is provided &quot;as is&quot; without warranties of
+          Cook with Yara is provided &quot;as is&quot; without warranties of
           any kind. We shall not be liable for any damages arising from the use
           of this Website or reliance on its content.
         </p>
@@ -85,7 +85,7 @@ export default function TermsPage() {
         <h2>Contact Us</h2>
         <p>
           If you have any questions about these Terms of Service, please contact
-          us at contact@cookwithlucia.com.
+          us at contact@cookwithyara.com.
         </p>
       </div>
     </div>

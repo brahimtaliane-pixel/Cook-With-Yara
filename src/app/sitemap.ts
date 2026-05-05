@@ -3,11 +3,12 @@ import { db } from "@/lib/db";
 import { articles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { ArticleStatus } from "@/lib/constants";
+import { CUISINES } from "@/lib/utils/cuisines";
 
 export const dynamic = "force-dynamic";
 
 const SITE_URL =
-  process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
+  process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const published = await db
@@ -48,6 +49,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })
   );
 
+  const cuisineEntries: MetadataRoute.Sitemap = CUISINES.map((c) => ({
+    url: `${SITE_URL}/cuisines/${c.slug}`,
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
   return [
     {
       url: SITE_URL,
@@ -61,5 +68,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     },
     ...recipeEntries,
     ...categoryEntries,
+    ...cuisineEntries,
   ];
 }

@@ -3,6 +3,8 @@ import { autopilotDecisions, pipelineRuns } from "@/lib/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { Badge } from "@/components/ui/badge";
 
+export const dynamic = "force-dynamic";
+
 const DECISION_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   selected: { label: "Selected", variant: "default" },
   rejected: { label: "Rejected", variant: "destructive" },

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
-  description: "Privacy policy for Cook with Lucia.",
+  description: "Privacy policy for Cook with Yara.",
 };
 
 export default function PrivacyPolicyPage() {
@@ -18,8 +18,8 @@ export default function PrivacyPolicyPage() {
       <div className="prose prose-neutral max-w-none space-y-6 [&_h2]:font-display [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:mt-10 [&_h2]:mb-4 [&_p]:leading-relaxed [&_p]:text-muted-foreground [&_ul]:text-muted-foreground [&_li]:leading-relaxed">
         <h2>Introduction</h2>
         <p>
-          Cook with Lucia (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;)
-          operates the website cookwithlucia.com. This Privacy Policy explains
+          Cook with Yara (&quot;we&quot;, &quot;our&quot;, or &quot;us&quot;)
+          operates the website cookwithyara.com. This Privacy Policy explains
           how we collect, use, and protect your information when you visit our
           website.
         </p>
@@ -104,7 +104,7 @@ export default function PrivacyPolicyPage() {
         <h2>Contact Us</h2>
         <p>
           If you have any questions about this Privacy Policy, please contact us
-          at privacy@cookwithlucia.com.
+          at privacy@cookwithyara.com.
         </p>
       </div>
     </div>

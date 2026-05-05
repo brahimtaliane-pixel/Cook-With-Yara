@@ -1,7 +1,7 @@
 import type { Article } from "@/lib/db/schema";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
-const SITE_NAME = "Cook with Lucia";
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com";
+const SITE_NAME = "Cook with Yara";
 
 // Deterministic hash from slug — produces varied but consistent ratings per article
 function hashSlug(slug: string): number {
@@ -78,7 +78,7 @@ export function generateRecipeJsonLd(
     image: article.heroImageUrl || undefined,
     author: jsonLd.author || {
       "@type": "Person",
-      name: "Lucia",
+      name: "Yara",
       url: SITE_URL,
     },
     publisher: {
@@ -105,7 +105,7 @@ export function generateWebsiteJsonLd() {
     name: SITE_NAME,
     url: SITE_URL,
     description:
-      "Discover trending recipes, cooking tips, and delicious meal ideas with Lucia.",
+      "Mediterranean and Levantine recipes from Yara's kitchen.",
   };
 }
 

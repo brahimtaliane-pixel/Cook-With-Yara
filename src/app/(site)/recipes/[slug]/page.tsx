@@ -112,7 +112,7 @@ export default async function RecipePage({ params }: Props) {
   }>;
   const nutrition = jsonLd?.nutrition as Record<string, string> | undefined;
   const readTime = estimateReadTime(article.contentMdx);
-  const canonicalUrl = `https://cookwithlucia.com/recipes/${article.slug}`;
+  const canonicalUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com"}/recipes/${article.slug}`;
   const headings = extractHeadings(article.contentMdx);
 
   const categorySlug = category
@@ -261,10 +261,10 @@ export default async function RecipePage({ params }: Props) {
         <div className="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-              L
+              Y
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">Lucia</p>
+              <p className="text-sm font-semibold text-foreground">Yara</p>
               <p className="text-xs text-muted-foreground">
                 {readTime}
                 {totalTime && <> &middot; {totalTime} total</>}
@@ -295,7 +295,7 @@ export default async function RecipePage({ params }: Props) {
                 </p>
               )}
               <p className="mt-1 text-sm text-muted-foreground">
-                cookwithlucia.com/recipes/{article.slug}
+                cookwithyara.com/recipes/{article.slug}
               </p>
             </div>
 

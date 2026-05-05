@@ -57,7 +57,7 @@ export async function fetchCompetitorRss(
   const res = await fetch(url, {
     headers: {
       "User-Agent":
-        "Mozilla/5.0 (compatible; CookWithLucia/1.0; +https://cookwithlucia.com)",
+        "Mozilla/5.0 (compatible; CookWithYara/1.0; +https://cookwithyara.com)",
     },
     next: { revalidate: 0 },
   });
@@ -118,7 +118,7 @@ export async function enrichPinsViaWidget(
       const res = await fetch(url, {
         headers: {
           "User-Agent":
-            "Mozilla/5.0 (compatible; CookWithLucia/1.0; +https://cookwithlucia.com)",
+            "Mozilla/5.0 (compatible; CookWithYara/1.0; +https://cookwithyara.com)",
         },
         next: { revalidate: 0 },
       });

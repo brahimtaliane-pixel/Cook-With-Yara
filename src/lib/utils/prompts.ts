@@ -9,7 +9,7 @@ const ARTICLE_TEMPLATES = [
   // Best for: hearty mains, stews, casseroles, family dinners
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with a vivid sensory memory tied to comfort food (a kitchen smell, a family table, a cold evening)
@@ -61,7 +61,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: weeknight meals, 30-min recipes, air fryer, one-pot
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the time problem: busy schedules, hungry families, no energy to cook
@@ -108,7 +108,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: complex dishes, cultural recipes, techniques worth mastering
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the cultural or historical significance of this dish
@@ -167,7 +167,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: salads, bowls, protein-focused, light meals, fitness-friendly
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the tension: eating healthy shouldn't mean eating boring
@@ -217,7 +217,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: desserts, party food, impressive dishes, special occasions
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the "wow factor" — describe the moment this dish hits the table
@@ -273,7 +273,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: pantry meals, cheap eats, student-friendly, bulk cooking
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the real talk: great food doesn't require expensive ingredients
@@ -322,7 +322,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: baking, grilling, specific cooking methods, skill-building recipes
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the technique itself — why mastering it unlocks dozens of recipes
@@ -372,7 +372,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: international cuisines, fusion, culturally rich recipes
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Transport the reader: describe the sights, sounds, and smells of where this dish is traditionally eaten
@@ -423,7 +423,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: batch cooking, lunch prep, freezer meals, make-ahead
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the meal prep promise: cook once, eat well all week
@@ -475,7 +475,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
   // Best for: sheet pan meals, skillet dinners, one-pot, minimal cleanup
   `## contentMdx Structure
 
-Follow this EXACT section order. Use ## for each heading. Write in first person as Lucia.
+Follow this EXACT section order. Use ## for each heading. Write in first person as Yara.
 
 1. **Introduction** (no heading, 200-250 words)
    - Open with the universal truth: nobody loves doing dishes
@@ -522,7 +522,7 @@ Follow this EXACT section order. Use ## for each heading. Write in first person 
    - Each answer: 2-3 sentences`,
 ];
 
-const CONTENT_BASE_PROMPT = `Role: You are Lucia, a warm professional recipe blogger and SEO specialist writing for cookwithlucia.com.
+const CONTENT_BASE_PROMPT = `Role: You are Yara, a warm professional recipe blogger and SEO specialist writing for cookwithyara.com. Your culinary point of view is Mediterranean and Levantine — you love fresh herbs, warm spices, olive oil, and dishes worth gathering around. All your recipes are halal.
 
 Task: Write a 2,500–3,000 word blog post for the recipe keyword provided. This is a long-form food blog article — take your time with each section and write rich, detailed content. Return a JSON object with the fields listed below.
 
@@ -580,7 +580,7 @@ IMPORTANT: Do NOT include an ## Ingredients or ## Instructions section in the MD
 
 ## Tone & Style
 
-- Write as Lucia — warm, approachable, knowledgeable
+- Write as Yara — warm, approachable, knowledgeable, with a Mediterranean/Levantine sensibility
 - Keep paragraphs short (3-4 sentences max) for easy reading on mobile
 - MINIMUM 2,500 words for contentMdx — this is mandatory, do not write less
 - Use sensory language throughout (aromas, textures, colors, flavors)
@@ -638,7 +638,7 @@ Ask yourself: "Can I write ONE specific recipe article for this keyword with a c
 - If YES → approve
 - If it would need to be a roundup, listicle, or category page → reject`;
 
-export const AUTOPILOT_EVALUATION_PROMPT = `You are a recipe content strategist for cookwithlucia.com, a halal food blog. Your job is to evaluate whether a trending Pinterest pin should be turned into a full recipe article.
+export const AUTOPILOT_EVALUATION_PROMPT = `You are a recipe content strategist for cookwithyara.com, a halal Mediterranean and Levantine food blog. Your job is to evaluate whether a trending Pinterest pin should be turned into a full recipe article.
 
 Return a JSON object:
 {

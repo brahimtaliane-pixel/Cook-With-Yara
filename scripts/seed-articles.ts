@@ -55,7 +55,7 @@ async function generateArticle(keyword: string) {
 {
   "title": "SEO title (60 chars max)",
   "metaDescription": "Meta description (155 chars max)",
-  "contentMdx": "Full blog article in MDX format. Minimum 800 words. Use ## headings for sections. Write as Lucia, a passionate home cook. Include personal tips, variations, storage instructions. Make it warm and engaging.",
+  "contentMdx": "Full blog article in MDX format. Minimum 800 words. Use ## headings for sections. Write as Yara, a Mediterranean home cook. Include personal tips, variations, storage instructions. Make it warm and engaging.",
   "recipeJsonLd": {
     "name": "Recipe name",
     "description": "Brief description",

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { DM_Sans, Playfair_Display } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+const inter = Inter({
   variable: "--font-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -12,33 +12,29 @@ const dmSans = DM_Sans({
 const playfair = Playfair_Display({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["500", "600", "700", "800", "900"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: "Cook with Lucia — Trending Recipes & Cooking Ideas",
-    template: "%s | Cook with Lucia",
+    default: "Cook with Yara — Mediterranean & Levantine Recipes",
+    template: "%s | Cook with Yara",
   },
   description:
-    "Discover trending recipes, cooking tips, and delicious meal ideas with Lucia. Fresh inspiration for your kitchen, every day.",
+    "Mediterranean and Levantine recipes from Yara's kitchen. Fresh herbs, bold spices, and dishes worth gathering around.",
   metadataBase: new URL(
-    process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com"
+    process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com"
   ),
   openGraph: {
-    siteName: "Cook with Lucia",
+    siteName: "Cook with Yara",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
   },
   alternates: {
-    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com",
-  },
-  verification: {
-    other: {
-      "p:domain_verify": ["5d0feaa50c34388ae5ccac30cdf8eee5"],
-    },
+    canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com",
   },
 };
 
@@ -50,7 +46,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${dmSans.variable} ${playfair.variable} font-sans antialiased`}
+        className={`${inter.variable} ${playfair.variable} font-sans antialiased`}
       >
         {children}
         {process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID && (

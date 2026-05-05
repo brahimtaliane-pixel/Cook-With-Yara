@@ -200,7 +200,7 @@ async function pushArticle(article: {
       .where(eq(articles.id, article.id));
 
     const canonicalUrl = getCanonicalUrl(article.slug);
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com";
 
     await fetch(`${siteUrl}/api/revalidate?slug=${article.slug}&secret=${process.env.CRON_SECRET}`);
 

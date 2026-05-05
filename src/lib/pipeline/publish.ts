@@ -38,7 +38,7 @@ export async function publishAndPin(): Promise<{ processed: number }> {
 
       // Trigger ISR revalidation
       const siteUrl =
-        process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
+        process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com";
       await fetch(`${siteUrl}/api/revalidate?slug=${article.slug}&secret=${process.env.CRON_SECRET}`);
 
       // Get recipe metadata

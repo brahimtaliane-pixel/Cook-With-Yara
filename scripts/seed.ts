@@ -368,7 +368,7 @@ async function seed() {
         ${kw.id}, ${recipe.slug}, ${recipe.title}, ${recipe.meta_description},
         ${recipe.content_mdx}, ${recipe.recipe_json_ld}::jsonb, 'published',
         ${recipe.hero_image_url},
-        ${"https://cookwithlucia.com/recipes/" + recipe.slug},
+        ${"https://cookwithyara.com/recipes/" + recipe.slug},
         NOW()
       )
       ON CONFLICT (slug) DO NOTHING

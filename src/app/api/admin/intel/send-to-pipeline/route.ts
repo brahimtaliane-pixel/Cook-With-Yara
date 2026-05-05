@@ -256,7 +256,7 @@ export async function POST(request: Request) {
 
         // Trigger ISR revalidation
         const siteUrl =
-          process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithlucia.com";
+          process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com";
         await fetch(
           `${siteUrl}/api/revalidate?slug=${slug}&secret=${process.env.CRON_SECRET}`
         );

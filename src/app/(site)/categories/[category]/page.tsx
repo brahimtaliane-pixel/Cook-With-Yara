@@ -69,9 +69,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${label} Recipes`,
     description:
       meta?.description ||
-      `Browse delicious ${label.toLowerCase()} recipes from Cook with Lucia.`,
+      `Browse delicious ${label.toLowerCase()} recipes from Cook with Yara.`,
     alternates: {
-      canonical: `https://cookwithlucia.com/categories/${category}`,
+      canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com"}/categories/${category}`,
     },
   };
 }

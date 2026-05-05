@@ -35,7 +35,7 @@ export async function sendAlert(subject: string, body: string): Promise<void> {
   const { error } = await resend.emails.send({
     from,
     to,
-    subject: `[CookWithLucia] ${subject}`,
+    subject: `[CookWithYara] ${subject}`,
     html: `<pre style="font-family: system-ui, sans-serif; white-space: pre-wrap;">${body}</pre>`,
   });
 
@@ -55,7 +55,7 @@ export async function sendSlackAlert(message: string): Promise<void> {
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: `[CookWithLucia] ${message}` }),
+    body: JSON.stringify({ text: `[CookWithYara] ${message}` }),
   });
 
   if (!res.ok) {

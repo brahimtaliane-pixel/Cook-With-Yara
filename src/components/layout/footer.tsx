@@ -12,7 +12,7 @@ const categoryLinks = [
 
 const exploreLinks = [
   { href: "/recipes", label: "All Recipes" },
-  { href: "#about", label: "About Lucia" },
+  { href: "#about", label: "About Yara" },
   { href: "#newsletter", label: "Newsletter" },
 ];
 
@@ -29,16 +29,16 @@ export function Footer() {
           {/* Brand + Newsletter */}
           <div className="lg:col-span-2">
             <Image
-              src="/mylogo.png"
-              alt="Cook with Lucia"
-              width={160}
-              height={40}
-              className="h-9 w-auto"
+              src="/logo.png"
+              alt="Cook with Yara"
+              width={540}
+              height={160}
+              className="h-14 w-auto sm:h-16"
             />
             <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
-              Hi, I&apos;m Lucia! I create simple, delicious recipes that anyone
-              can make at home. From quick weeknight dinners to impressive
-              desserts, there&apos;s something here for everyone.
+              Hi, I&apos;m Yara. I share Mediterranean and Levantine recipes —
+              tested in my kitchen and built around fresh herbs, warm spices,
+              and food worth gathering around.
             </p>
 
             {/* Footer newsletter form */}
@@ -67,7 +67,7 @@ export function Footer() {
             {/* Social icons */}
             <div className="mt-6 flex items-center gap-4">
               <a
-                href="https://pinterest.com/cookwithlucia"
+                href="https://pinterest.com/cookwithyara"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Follow on Pinterest"
@@ -78,7 +78,7 @@ export function Footer() {
                 </svg>
               </a>
               <a
-                href="https://instagram.com/cookwithlucia"
+                href="https://instagram.com/cookwithyara"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Follow on Instagram"
@@ -89,7 +89,7 @@ export function Footer() {
                 </svg>
               </a>
               <a
-                href="https://facebook.com/cookwithlucia"
+                href="https://facebook.com/cookwithyara"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Follow on Facebook"
@@ -143,7 +143,7 @@ export function Footer() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t pt-8 sm:flex-row">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} Cook with Lucia. Made with love.
+            &copy; {new Date().getFullYear()} Cook with Yara. Made with love.
           </p>
           <div className="flex items-center gap-4">
             {legalLinks.map((link) => (

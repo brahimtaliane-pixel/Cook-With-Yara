@@ -47,7 +47,7 @@ async function testStep(name: string, path: string): Promise<StepResult> {
 }
 
 async function main() {
-  console.log("=== Cook With Lucia - Pipeline Test ===");
+  console.log("=== Cook with Yara - Pipeline Test ===");
   console.log(`Base URL: ${BASE_URL}`);
   console.log(`Cron Secret: ${CRON_SECRET.slice(0, 4)}...`);
   console.log("\nMake sure the dev server is running (npm run dev)\n");

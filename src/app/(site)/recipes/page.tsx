@@ -14,9 +14,9 @@ export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "All Recipes",
   description:
-    "Browse all of Lucia's delicious recipes. Find your next favorite meal — from quick weeknight dinners to impressive desserts.",
+    "Browse Yara's Mediterranean and Levantine recipes — herb-forward, fresh, and built for real home cooks.",
   alternates: {
-    canonical: "https://cookwithlucia.com/recipes",
+    canonical: `${process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com"}/recipes`,
   },
 };
 
