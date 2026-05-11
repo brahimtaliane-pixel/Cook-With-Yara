@@ -157,7 +157,7 @@ export async function POST(request: Request) {
         const { url: heroImageUrl } = await put(
           `recipes/${slug}/hero.${extension}`,
           image.data,
-          { access: "public", contentType: image.mimeType }
+          { access: "public", contentType: image.mimeType, allowOverwrite: true }
         );
 
         await db
@@ -190,8 +190,8 @@ export async function POST(request: Request) {
         ]);
 
         const [blob1, blob2] = await Promise.all([
-          put(`recipes/${slug}/pin.png`, pngBuffer1, { access: "public" }),
-          put(`recipes/${slug}/pin2.png`, pngBuffer2, { access: "public" }),
+          put(`recipes/${slug}/pin.png`, pngBuffer1, { access: "public", allowOverwrite: true }),
+          put(`recipes/${slug}/pin2.png`, pngBuffer2, { access: "public", allowOverwrite: true }),
         ]);
 
         await db

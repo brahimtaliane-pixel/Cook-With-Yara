@@ -49,8 +49,8 @@ export async function createPinImage(): Promise<{ processed: number }> {
 
       // Upload both to Vercel Blob in parallel
       const [blob1, blob2] = await Promise.all([
-        put(`recipes/${article.slug}/pin.png`, pngBuffer1, { access: "public" }),
-        put(`recipes/${article.slug}/pin2.png`, pngBuffer2, { access: "public" }),
+        put(`recipes/${article.slug}/pin.png`, pngBuffer1, { access: "public", allowOverwrite: true }),
+        put(`recipes/${article.slug}/pin2.png`, pngBuffer2, { access: "public", allowOverwrite: true }),
       ]);
 
       await db

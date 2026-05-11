@@ -40,7 +40,7 @@ export async function submitImage(): Promise<{ processed: number }> {
     const { url } = await put(
       `recipes/${article.slug}/hero.${extension}`,
       image.data,
-      { access: "public", contentType: image.mimeType }
+      { access: "public", contentType: image.mimeType, allowOverwrite: true }
     );
 
     await db
