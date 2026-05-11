@@ -4,7 +4,6 @@
     { "path": "/api/cron/approve-keywords", "schedule": "15 0,6,12,18 * * *" },
     { "path": "/api/cron/generate-content", "schedule": "0,30 7-23 * * *" },
     { "path": "/api/cron/submit-image", "schedule": "10,40 7-23 * * *" },
-    { "path": "/api/cron/poll-images", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/create-pin-image", "schedule": "5,35 7-23 * * *" },
     { "path": "/api/cron/publish-and-pin", "schedule": "20,50 7-23 * * *" },
     { "path": "/api/cron/post-pins", "schedule": "*/15 7-23 * * *" },

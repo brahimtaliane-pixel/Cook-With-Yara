@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { generateSlug } from "@/lib/utils/slug";
 import { ArticleStatus, KeywordStatus } from "@/lib/constants";
 import { generateArticleContent } from "@/lib/services/ai-writer";
-import { submitImagineJob, checkImagineJob } from "@/lib/services/imagineapi";
+import { generateHeroImage } from "@/lib/services/nano-banana";
 import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
 import { getCanonicalUrl } from "@/lib/utils/seo";
 import { getBoardForArticle } from "@/lib/services/pinterest-boards";
@@ -123,13 +123,6 @@ export async function POST(request: Request) {
 
         const content = await generateArticleContent(keyword);
 
-        // Sanitize prompt for ImaginePro content filter
-        const sanitizedPrompt = content.midjourneyPrompt
-          .replace(/\bbreast(s)?\b/gi, "fillet$1")
-          .replace(/\bthigh(s)?\b/gi, "piece$1")
-          .replace(/\bnaked\b/gi, "plain")
-          .replace(/\bbare\b/gi, "simple");
-
         await db
           .update(articles)
           .set({
@@ -137,7 +130,7 @@ export async function POST(request: Request) {
             metaDescription: content.metaDescription,
             contentMdx: content.contentMdx,
             recipeJsonLd: content.recipeJsonLd,
-            midjourneyPrompt: sanitizedPrompt,
+            midjourneyPrompt: content.midjourneyPrompt,
             status: ArticleStatus.CONTENT_READY,
             updatedAt: new Date(),
           })
@@ -148,68 +141,35 @@ export async function POST(request: Request) {
           .set({ status: KeywordStatus.COMPLETED, updatedAt: new Date() })
           .where(eq(keywords.id, newKeyword.id));
 
-        // --- Stage 3: Generate hero image via Midjourney ---
+        // --- Stage 3: Generate hero image via Nano Banana ---
         sendEvent({ stage: "image", message: "Generating hero image..." });
-
-        const taskId = await submitImagineJob(sanitizedPrompt);
 
         await db
           .update(articles)
           .set({
-            midjourneyTaskId: taskId,
             status: ArticleStatus.IMAGE_GENERATING,
             updatedAt: new Date(),
           })
           .where(eq(articles.id, newArticle.id));
 
-        // Poll until complete (max ~5 minutes)
-        let heroImageUrl: string | null = null;
-        const maxPolls = 60; // 60 * 5s = 5 minutes
-        for (let i = 0; i < maxPolls; i++) {
-          await new Promise((r) => setTimeout(r, 5000));
-          const result = await checkImagineJob(taskId);
+        const image = await generateHeroImage(content.midjourneyPrompt);
+        const extension = image.mimeType === "image/jpeg" ? "jpg" : "png";
+        const { url: heroImageUrl } = await put(
+          `recipes/${slug}/hero.${extension}`,
+          image.data,
+          { access: "public", contentType: image.mimeType }
+        );
 
-          if (result.status === "completed" && result.result) {
-            // Download and upload to Vercel Blob
-            const imageResponse = await fetch(result.result);
-            if (!imageResponse.ok) {
-              throw new Error(`Failed to download image: ${imageResponse.status}`);
-            }
-            const imageBlob = await imageResponse.blob();
-            const { url } = await put(
-              `recipes/${slug}/hero.jpg`,
-              imageBlob,
-              { access: "public" }
-            );
-            heroImageUrl = url;
+        await db
+          .update(articles)
+          .set({
+            heroImageUrl,
+            status: ArticleStatus.IMAGE_READY,
+            updatedAt: new Date(),
+          })
+          .where(eq(articles.id, newArticle.id));
 
-            await db
-              .update(articles)
-              .set({
-                heroImageUrl: url,
-                status: ArticleStatus.IMAGE_READY,
-                updatedAt: new Date(),
-              })
-              .where(eq(articles.id, newArticle.id));
-
-            sendEvent({ stage: "image_done", message: "Hero image ready!" });
-            break;
-          } else if (result.status === "failed") {
-            throw new Error("Midjourney image generation failed");
-          }
-
-          // Still processing — send progress
-          if (i % 3 === 0) {
-            sendEvent({
-              stage: "image",
-              message: "Generating hero image...",
-            });
-          }
-        }
-
-        if (!heroImageUrl) {
-          throw new Error("Image generation timed out");
-        }
+        sendEvent({ stage: "image_done", message: "Hero image ready!" });
 
         // --- Stage 4: Generate pin images ---
         sendEvent({ stage: "pins", message: "Creating pin designs..." });

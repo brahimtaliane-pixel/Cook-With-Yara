@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import { buildContentPrompt, buildApprovalPrompt, buildAutopilotPrompt } from "@/lib/utils/prompts";
 
 // === Types ===
@@ -16,38 +16,51 @@ export interface KeywordEvaluation {
   reason: string;
 }
 
-// === Client ===
-
-function getClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-  return new Anthropic({ apiKey });
+export interface AutopilotEvaluation {
+  approved: boolean;
+  reason: string;
 }
 
-const MODEL = "claude-sonnet-4-5-20250929";
+// === Client ===
 
-async function callClaude(systemMessage: string, userMessage: string): Promise<string> {
-  const client = getClient();
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 8192,
-    messages: [
-      { role: "user", content: userMessage },
-    ],
-    system: systemMessage,
+function getClient(): GoogleGenAI {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+  return new GoogleGenAI({ apiKey });
+}
+
+const MODEL_FAST = "gemini-2.5-flash";   // approval / evaluation
+const MODEL_QUALITY = "gemini-2.5-pro";  // long-form content
+
+async function callGemini(
+  model: string,
+  systemInstruction: string,
+  userMessage: string,
+  opts: { thinking?: boolean; maxOutputTokens?: number } = {},
+): Promise<string> {
+  const ai = getClient();
+  const response = await ai.models.generateContent({
+    model,
+    contents: userMessage,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      maxOutputTokens: opts.maxOutputTokens ?? 8192,
+      ...(opts.thinking === false
+        ? { thinkingConfig: { thinkingBudget: 0 } }
+        : {}),
+    },
   });
 
-  const block = response.content[0];
-  if (block.type !== "text") {
-    throw new Error("Unexpected response type from Claude");
-  }
+  const text = response.text;
+  if (!text) throw new Error("Empty response from Gemini");
 
-  // Strip markdown code fences — Claude sometimes wraps JSON in ```json ... ```
-  let text = block.text.trim();
-  if (text.startsWith("```")) {
-    text = text.replace(/^```(?:\w+)?\s*/, "").replace(/\s*```\s*$/, "");
+  // Defensive: strip code fences if the model wraps JSON anyway
+  let out = text.trim();
+  if (out.startsWith("```")) {
+    out = out.replace(/^```(?:\w+)?\s*/, "").replace(/\s*```\s*$/, "");
   }
-  return text.trim();
+  return out.trim();
 }
 
 // === Public API ===
@@ -56,9 +69,11 @@ export async function generateArticleContent(
   keyword: string,
 ): Promise<GeneratedArticle> {
   const prompt = buildContentPrompt(keyword);
-  const raw = await callClaude(
+  const raw = await callGemini(
+    MODEL_QUALITY,
     "You are a recipe content generator. Return only valid JSON.",
     prompt,
+    { maxOutputTokens: 32768 },
   );
 
   try {
@@ -69,14 +84,9 @@ export async function generateArticleContent(
     return parsed;
   } catch (err) {
     throw new Error(
-      `Failed to parse article content from Claude: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to parse article content from Gemini: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-}
-
-export interface AutopilotEvaluation {
-  approved: boolean;
-  reason: string;
 }
 
 export async function evaluatePinForAutopilot(context: {
@@ -86,9 +96,11 @@ export async function evaluatePinForAutopilot(context: {
   recentArticleTitles: string[];
 }): Promise<AutopilotEvaluation> {
   const prompt = buildAutopilotPrompt(context);
-  const raw = await callClaude(
+  const raw = await callGemini(
+    MODEL_FAST,
     "You are a recipe content strategist. Return only valid JSON.",
     prompt,
+    { thinking: false },
   );
 
   try {
@@ -106,9 +118,11 @@ export async function evaluateKeyword(
   keyword: string,
 ): Promise<KeywordEvaluation> {
   const prompt = buildApprovalPrompt(keyword);
-  const raw = await callClaude(
+  const raw = await callGemini(
+    MODEL_FAST,
     "You are a keyword evaluator. Return only valid JSON.",
     prompt,
+    { thinking: false },
   );
 
   try {
@@ -119,7 +133,7 @@ export async function evaluateKeyword(
     return parsed;
   } catch (err) {
     throw new Error(
-      `Failed to parse keyword evaluation from Claude: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to parse keyword evaluation from Gemini: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

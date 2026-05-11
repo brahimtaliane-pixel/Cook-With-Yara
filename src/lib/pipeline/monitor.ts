@@ -1,8 +1,6 @@
 import { db } from "@/lib/db";
 import { articles, pinQueue } from "@/lib/db/schema";
 import { ArticleStatus } from "@/lib/constants";
-import { checkImagineJob } from "@/lib/services/imagineapi";
-import { put } from "@vercel/blob";
 import { eq, and, lt, sql } from "drizzle-orm";
 
 const STUCK_THRESHOLD_MIN = 15;
@@ -21,77 +19,24 @@ export async function runPipelineMonitor(): Promise<{ processed: number }> {
   return { processed };
 }
 
-/** image_generating >15 min — poll Midjourney before blindly resetting */
+/** image_generating >15 min — Nano Banana is synchronous, so stuck means the request hung or crashed; reset. */
 async function recoverStuckImageGenerating(): Promise<number> {
   const cutoff = new Date(Date.now() - STUCK_THRESHOLD_MIN * 60 * 1000);
-  const stuck = await db
-    .select()
-    .from(articles)
+  const result = await db
+    .update(articles)
+    .set({ status: ArticleStatus.CONTENT_READY, updatedAt: new Date() })
     .where(
       and(
         eq(articles.status, ArticleStatus.IMAGE_GENERATING),
         lt(articles.updatedAt, cutoff)
       )
-    );
+    )
+    .returning();
 
-  let recovered = 0;
-
-  for (const article of stuck) {
-    if (!article.midjourneyTaskId) {
-      // No task ID — can only reset
-      console.log(`[monitor] image_generating article ${article.id} has no taskId, resetting to content_ready`);
-      await db
-        .update(articles)
-        .set({ status: ArticleStatus.CONTENT_READY, updatedAt: new Date() })
-        .where(eq(articles.id, article.id));
-      recovered++;
-      continue;
-    }
-
-    try {
-      const result = await checkImagineJob(article.midjourneyTaskId);
-
-      if (result.status === "completed" && result.result) {
-        // Image is done — download, save to blob, advance to image_ready
-        console.log(`[monitor] image_generating article ${article.id}: Midjourney done, advancing`);
-        const imageResponse = await fetch(result.result);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status}`);
-        }
-        const imageBlob = await imageResponse.blob();
-        const { url } = await put(
-          `recipes/${article.slug}/hero.jpg`,
-          imageBlob,
-          { access: "public" }
-        );
-
-        await db
-          .update(articles)
-          .set({
-            heroImageUrl: url,
-            status: ArticleStatus.IMAGE_READY,
-            updatedAt: new Date(),
-          })
-          .where(eq(articles.id, article.id));
-        recovered++;
-      } else if (result.status === "failed") {
-        console.log(`[monitor] image_generating article ${article.id}: Midjourney failed, resetting`);
-        await db
-          .update(articles)
-          .set({ status: ArticleStatus.CONTENT_READY, updatedAt: new Date() })
-          .where(eq(articles.id, article.id));
-        recovered++;
-      } else {
-        // Still processing — skip, try next run
-        console.log(`[monitor] image_generating article ${article.id}: Midjourney still ${result.status}, skipping`);
-      }
-    } catch (error) {
-      // API might be down — skip and try next run
-      console.log(`[monitor] image_generating article ${article.id}: API error, skipping`, error);
-    }
+  if (result.length > 0) {
+    console.log(`[monitor] Reset ${result.length} stuck image_generating articles to content_ready`);
   }
-
-  return recovered;
+  return result.length;
 }
 
 /** content_generating >15 min — no external state, just reset */

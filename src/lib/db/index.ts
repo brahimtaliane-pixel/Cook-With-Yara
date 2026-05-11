@@ -7,7 +7,13 @@ let _db: PostgresJsDatabase<typeof schema> | null = null;
 
 function getDb(): PostgresJsDatabase<typeof schema> {
   if (!_db) {
-    const client = postgres(process.env.DATABASE_URL!, { prepare: false });
+    const client = postgres(process.env.DATABASE_URL!, {
+      prepare: false,
+      max: 1,
+      idle_timeout: 20,
+      max_lifetime: 60 * 30,
+      ssl: "require",
+    });
     _db = drizzle(client, { schema });
   }
   return _db;
