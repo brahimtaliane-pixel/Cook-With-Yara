@@ -31,6 +31,15 @@ function parseDuration(iso?: string): string | null {
   return `${mins} min`;
 }
 
+function totalMinutes(recipeJsonLd: unknown): number | null {
+  const jsonLd = parseJsonLd(recipeJsonLd);
+  const iso = (jsonLd?.totalTime as string | undefined) ?? null;
+  if (!iso) return null;
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?/);
+  if (!match) return null;
+  return parseInt(match[1] || "0") * 60 + parseInt(match[2] || "0");
+}
+
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
@@ -61,6 +70,22 @@ export default async function HomePage() {
 
   const [featured, ...latestRecipes] = publishedRecipes;
   const jsonLd = generateWebsiteJsonLd();
+
+  // Quick recipes (≤30 minutes total) — pull a wider pool so we don't run out
+  // when the recent feed is dominated by longer recipes.
+  const quickPool = await db
+    .select()
+    .from(articles)
+    .where(eq(articles.status, ArticleStatus.PUBLISHED))
+    .orderBy(desc(articles.publishedAt))
+    .limit(30);
+
+  const quickRecipes = quickPool
+    .filter((a) => {
+      const m = totalMinutes(a.recipeJsonLd);
+      return m !== null && m <= 30;
+    })
+    .slice(0, 6);
 
   // Per-cuisine recipe counts for the "Around the Mediterranean" strip.
   // Reads from the same publishedRecipes query is not enough (we limit to 7),
@@ -350,6 +375,40 @@ export default async function HomePage() {
           </Link>
         </div>
       </section>
+
+      {/* ── Quick recipes (≤30 min) ── */}
+      {quickRecipes.length > 0 && (
+        <section className="bg-secondary/30 py-16">
+          <div className="mx-auto max-w-7xl px-6">
+            <div className="mb-10 flex items-end justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
+                  Ready in a flash
+                </p>
+                <h2 className="mt-1 font-display text-3xl font-bold text-foreground">
+                  Quick recipes — under 30 minutes
+                </h2>
+                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+                  For the nights when dinner needs to happen now. Every one of
+                  these lands on the table in half an hour or less.
+                </p>
+              </div>
+              <Link
+                href="/recipes"
+                className="hidden items-center gap-1 text-sm font-semibold text-primary transition-colors hover:text-primary/80 sm:flex"
+              >
+                Browse all &rarr;
+              </Link>
+            </div>
+
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {quickRecipes.map((recipe) => (
+                <RecipeCard key={recipe.id} article={recipe} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ── Newsletter ── */}
       <section
