@@ -284,11 +284,11 @@ export default async function RecipePage({ params }: Props) {
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="lg:grid lg:grid-cols-[1fr_220px] lg:gap-10">
           <article className="max-w-4xl">
-            {/* Print-only header */}
+            {/* Print-only header — h2 (not h1) so we don't duplicate the visible h1 */}
             <div className="hidden print:block print:mb-6">
-              <h1 className="font-display text-3xl font-bold text-foreground">
+              <h2 className="font-display text-3xl font-bold text-foreground">
                 {article.title}
-              </h1>
+              </h2>
               {article.metaDescription && (
                 <p className="mt-2 text-base text-muted-foreground">
                   {article.metaDescription}
@@ -297,7 +297,7 @@ export default async function RecipePage({ params }: Props) {
               <p className="mt-1 text-sm text-muted-foreground">
                 cookwithyara.com/recipes/{article.slug}
               </p>
-            </div>
+            </div>{/* end print-only header */}
 
             {/* Mobile TOC */}
             {headings.length >= 2 && <TableOfContents headings={headings} />}

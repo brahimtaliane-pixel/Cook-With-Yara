@@ -16,6 +16,25 @@ import { computePinScore } from "@/lib/services/intel-scoring";
 import { evaluatePinForAutopilot } from "@/lib/services/ai-writer";
 import { generateSlug } from "@/lib/utils/slug";
 
+// Pin titles from competitors are often marketing-style — multi-part with
+// separators (e.g. "Bang Bang Salmon Bites Bowls – A Flavor Explosion in
+// Every Bite!"). Trim to the first segment and cap length before slugging
+// so we don't end up with 70-char URLs that Google truncates in SERPs.
+function normalizePinTitle(title: string): string {
+  let cleaned = title
+    .replace(/^["“”'`]+|["“”'`]+$/g, "") // strip surrounding quote-like chars
+    .split(/\s+[|:–—-]\s+/)[0]   // first segment before " | ", " – ", " — ", " - ", " : "
+    .trim();
+
+  if (cleaned.length <= 50) return cleaned;
+
+  // Truncate at the last word boundary within 50 chars
+  const truncated = cleaned.slice(0, 50);
+  const lastSpace = truncated.lastIndexOf(" ");
+  cleaned = lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated;
+  return cleaned.trim();
+}
+
 export async function runAutopilot(
   runId: string
 ): Promise<{ processed: number }> {
@@ -123,7 +142,7 @@ export async function runAutopilot(
   // 6. Check for duplicate slugs/keywords
   const candidates: typeof scoredPins = [];
   for (const item of scoredPins) {
-    const slug = generateSlug(item.pin.title);
+    const slug = generateSlug(normalizePinTitle(item.pin.title));
 
     const [existingArticle] = await db
       .select({ id: articles.id })
@@ -208,7 +227,7 @@ export async function runAutopilot(
     }
 
     // 9. Create keyword + article
-    const slug = generateSlug(pin.title);
+    const slug = generateSlug(normalizePinTitle(pin.title));
 
     const [newKeyword] = await db
       .insert(keywords)
