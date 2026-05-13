@@ -29,6 +29,7 @@ export const metadata: Metadata = {
   openGraph: {
     siteName: "Cook with Yara",
     type: "website",
+    locale: "en_US",
     images: [
       {
         url: "/hero-yara-kitchen.webp",
@@ -45,6 +46,18 @@ export const metadata: Metadata = {
   alternates: {
     canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com",
   },
+  icons: {
+    icon: "/favicon.ico",
+    // To add iOS home-screen icon: drop a 180x180 PNG at app/apple-icon.png
+    // (Next.js conventional file — no config needed).
+  },
+};
+
+export const viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#FEF7ED" },
+    { media: "(prefers-color-scheme: dark)", color: "#9A3412" },
+  ],
 };
 
 export default function RootLayout({
