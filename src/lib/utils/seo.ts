@@ -106,6 +106,48 @@ export function generateWebsiteJsonLd() {
     url: SITE_URL,
     description:
       "Mediterranean and Levantine recipes from Yara's kitchen.",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: `${SITE_URL}/recipes?q={search_term_string}`,
+      "query-input": "required name=search_term_string",
+    },
+  };
+}
+
+const SOCIAL_PROFILES = [
+  "https://pinterest.com/cookwithyara",
+  "https://instagram.com/cookwithyara",
+  "https://facebook.com/cookwithyara",
+];
+
+export function generateOrganizationJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: SITE_NAME,
+    url: SITE_URL,
+    logo: `${SITE_URL}/mylogo.png`,
+    description:
+      "Mediterranean and Levantine recipes from Yara's kitchen.",
+    sameAs: SOCIAL_PROFILES,
+  };
+}
+
+export function generatePersonJsonLd() {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: "Yara",
+    url: SITE_URL,
+    jobTitle: "Recipe Creator",
+    worksFor: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: SITE_URL,
+    },
+    description:
+      "Yara cooks Mediterranean and Levantine food in her own kitchen and writes every recipe like she's teaching a friend.",
+    sameAs: SOCIAL_PROFILES,
   };
 }
 

@@ -62,7 +62,7 @@ export function HeroSection() {
 
           {/* Headline — bold high-contrast serif, 2 rows: regular + italic */}
           <h1 className="mt-6 font-display text-4xl font-bold leading-[1.0] tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl">
-            Simple recipes,
+            Mediterranean recipes,
             <br />
             <span className="italic text-primary">made with love.</span>
           </h1>

@@ -29,9 +29,18 @@ export const metadata: Metadata = {
   openGraph: {
     siteName: "Cook with Yara",
     type: "website",
+    images: [
+      {
+        url: "/hero-yara-kitchen.webp",
+        width: 1672,
+        height: 941,
+        alt: "Cook with Yara — Mediterranean & Levantine recipes",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
+    images: ["/hero-yara-kitchen.webp"],
   },
   alternates: {
     canonical: process.env.NEXT_PUBLIC_SITE_URL || "https://cookwithyara.com",

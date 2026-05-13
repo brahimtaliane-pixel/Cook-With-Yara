@@ -5,7 +5,12 @@ import { db } from "@/lib/db";
 import { articles } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { ArticleStatus } from "@/lib/constants";
-import { generateWebsiteJsonLd } from "@/lib/utils/seo";
+import {
+  generateWebsiteJsonLd,
+  generateOrganizationJsonLd,
+  generatePersonJsonLd,
+  generateItemListJsonLd,
+} from "@/lib/utils/seo";
 import { CUISINES, articleMatchesCuisine } from "@/lib/utils/cuisines";
 import { RecipeCard } from "@/components/recipe-card";
 import { HeroSection } from "@/components/hero-section";
@@ -70,6 +75,11 @@ export default async function HomePage() {
 
   const [featured, ...latestRecipes] = publishedRecipes;
   const jsonLd = generateWebsiteJsonLd();
+  const orgJsonLd = generateOrganizationJsonLd();
+  const personJsonLd = generatePersonJsonLd();
+  const itemListJsonLd = publishedRecipes.length > 0
+    ? generateItemListJsonLd(publishedRecipes)
+    : null;
 
   // Quick recipes (≤30 minutes total) — pull a wider pool so we don't run out
   // when the recent feed is dominated by longer recipes.
@@ -109,6 +119,20 @@ export default async function HomePage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(personJsonLd) }}
+      />
+      {itemListJsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(itemListJsonLd) }}
+        />
+      )}
 
       {/* ── Hero Section ── */}
       <HeroSection />
