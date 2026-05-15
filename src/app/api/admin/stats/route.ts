@@ -26,25 +26,26 @@ export async function GET() {
     createdToday: sql<number>`count(*) filter (where ${articles.createdAt} >= ${todayStart.toISOString()}::timestamp)::int`,
   }).from(articles);
 
-  // Single query for all pin + keyword + in-progress stats
-  const [[pinStats], [kwCount], inProgressRows] = await Promise.all([
-    db.select({
-      postedToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
-      pending: sql<number>`count(*) filter (where ${pinQueue.status} = 'pending')::int`,
-      failed: sql<number>`count(*) filter (where ${pinQueue.status} = 'failed')::int`,
-      originalToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.pinType} = 'original' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
-      multiboardToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.pinType} = 'multiboard' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
-      recycledToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.pinType} = 'recycled' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
-      totalPostedAllTime: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted')::int`,
-    }).from(pinQueue),
-    db.select({ value: sql<number>`count(*)::int` }).from(keywords),
-    db.select({
-      status: articles.status,
-      value: sql<number>`count(*)::int`,
-    }).from(articles).where(
-      sql`${articles.status} IN ('content_generating', 'image_generating', 'pin_generating', 'publishing', 'content_ready', 'image_ready', 'pin_ready')`
-    ).groupBy(articles.status),
-  ]);
+  // Sequential queries (not Promise.all) — postgres-js with max:1 was
+  // hanging indefinitely on parallel queries through the single conn.
+  const [pinStats] = await db.select({
+    postedToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
+    pending: sql<number>`count(*) filter (where ${pinQueue.status} = 'pending')::int`,
+    failed: sql<number>`count(*) filter (where ${pinQueue.status} = 'failed')::int`,
+    originalToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.pinType} = 'original' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
+    multiboardToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.pinType} = 'multiboard' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
+    recycledToday: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted' and ${pinQueue.pinType} = 'recycled' and ${pinQueue.postedAt} >= ${todayStart.toISOString()}::timestamp)::int`,
+    totalPostedAllTime: sql<number>`count(*) filter (where ${pinQueue.status} = 'posted')::int`,
+  }).from(pinQueue);
+
+  const [kwCount] = await db.select({ value: sql<number>`count(*)::int` }).from(keywords);
+
+  const inProgressRows = await db.select({
+    status: articles.status,
+    value: sql<number>`count(*)::int`,
+  }).from(articles).where(
+    sql`${articles.status} IN ('content_generating', 'image_generating', 'pin_generating', 'publishing', 'content_ready', 'image_ready', 'pin_ready')`
+  ).groupBy(articles.status);
 
   // Pipeline runs - sequential to avoid connection pressure
   const recentRuns = await db.select().from(pipelineRuns).orderBy(desc(pipelineRuns.startedAt)).limit(10);
