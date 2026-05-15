@@ -15,58 +15,54 @@ export default async function IntelPage() {
   const monthAgo = new Date();
   monthAgo.setDate(monthAgo.getDate() - 30);
 
-  const [
-    competitors,
-    trendingPins,
-    [totalRow],
-    [weekRow],
-    [avgVelRow],
-    topDomainRows,
-    [compRow],
-    [pipelineRow],
-    [totalSavesRow],
-  ] = await Promise.all([
-    db
-      .select()
-      .from(intelCompetitors)
-      .orderBy(desc(intelCompetitors.createdAt)),
-    db
-      .select()
-      .from(intelPins)
-      .where(and(isNotNull(intelPins.pinCreatedAt), gte(intelPins.pinCreatedAt, monthAgo)))
-      .orderBy(desc(intelPins.velocity))
-      .limit(500),
-    db.select({ value: count() }).from(intelPins),
-    db
-      .select({ value: count() })
-      .from(intelPins)
-      .where(gte(intelPins.discoveredAt, weekAgo)),
-    db
-      .select({ value: avg(intelPins.velocity) })
-      .from(intelPins)
-      .where(gte(intelPins.velocity, 1)),
-    db
-      .select({
-        domain: intelPins.domain,
-        cnt: count(),
-      })
-      .from(intelPins)
-      .where(sql`${intelPins.domain} != ''`)
-      .groupBy(intelPins.domain)
-      .orderBy(desc(count()))
-      .limit(1),
-    db
-      .select({ value: count() })
-      .from(intelCompetitors)
-      .where(eq(intelCompetitors.isActive, true)),
-    db
-      .select({ value: count() })
-      .from(intelPins)
-      .where(eq(intelPins.sentToPipeline, true)),
-    db
-      .select({ value: sum(intelPins.saves) })
-      .from(intelPins),
-  ]);
+  // Sequential queries (not Promise.all) — postgres-js with max:1 hangs
+  // indefinitely on parallel queries through the single connection. Local
+  // works, production deadlocks.
+  const competitors = await db
+    .select()
+    .from(intelCompetitors)
+    .orderBy(desc(intelCompetitors.createdAt));
+
+  const trendingPins = await db
+    .select()
+    .from(intelPins)
+    .where(and(isNotNull(intelPins.pinCreatedAt), gte(intelPins.pinCreatedAt, monthAgo)))
+    .orderBy(desc(intelPins.velocity))
+    .limit(500);
+
+  const [totalRow] = await db.select({ value: count() }).from(intelPins);
+
+  const [weekRow] = await db
+    .select({ value: count() })
+    .from(intelPins)
+    .where(gte(intelPins.discoveredAt, weekAgo));
+
+  const [avgVelRow] = await db
+    .select({ value: avg(intelPins.velocity) })
+    .from(intelPins)
+    .where(gte(intelPins.velocity, 1));
+
+  const topDomainRows = await db
+    .select({ domain: intelPins.domain, cnt: count() })
+    .from(intelPins)
+    .where(sql`${intelPins.domain} != ''`)
+    .groupBy(intelPins.domain)
+    .orderBy(desc(count()))
+    .limit(1);
+
+  const [compRow] = await db
+    .select({ value: count() })
+    .from(intelCompetitors)
+    .where(eq(intelCompetitors.isActive, true));
+
+  const [pipelineRow] = await db
+    .select({ value: count() })
+    .from(intelPins)
+    .where(eq(intelPins.sentToPipeline, true));
+
+  const [totalSavesRow] = await db
+    .select({ value: sum(intelPins.saves) })
+    .from(intelPins);
 
   // Build a set of existing article slugs to detect duplicates
   const existingArticles = await db
