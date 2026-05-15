@@ -3,13 +3,17 @@ import { db } from "@/lib/db";
 import { pipelineConfig } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=0, s-maxage=30, stale-while-revalidate=120",
+};
+
 export async function GET() {
   const rows = await db.select().from(pipelineConfig);
   const config: Record<string, string> = {};
   for (const row of rows) {
     config[row.key] = row.value;
   }
-  return NextResponse.json({ config });
+  return NextResponse.json({ config }, { headers: CACHE_HEADERS });
 }
 
 export async function POST(request: Request) {

@@ -57,5 +57,9 @@ export async function GET() {
     selectedBoardId,
     boards,
     tokenExpiresAt,
+  }, {
+    headers: {
+      "Cache-Control": "private, max-age=0, s-maxage=30, stale-while-revalidate=120",
+    },
   });
 }

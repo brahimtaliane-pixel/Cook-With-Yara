@@ -5,6 +5,13 @@ import { desc, gte, sql } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
+// 30s edge cache + 2min stale-while-revalidate. Admin dashboard data is
+// non-critical for staleness and this keeps slow cold starts from
+// blocking page loads.
+const CACHE_HEADERS = {
+  "Cache-Control": "private, max-age=0, s-maxage=30, stale-while-revalidate=120",
+};
+
 export async function GET() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -75,5 +82,5 @@ export async function GET() {
     inProgress: inProgressRows,
     recentRuns,
     todayRunsSummary,
-  });
+  }, { headers: CACHE_HEADERS });
 }
