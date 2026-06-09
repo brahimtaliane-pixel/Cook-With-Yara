@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import { buildContentPrompt, buildApprovalPrompt, buildAutopilotPrompt } from "@/lib/utils/prompts";
 
 // === Types ===
@@ -32,6 +33,18 @@ function getClient(): GoogleGenAI {
 const MODEL_FAST = "gemini-2.5-flash";   // approval / evaluation
 const MODEL_QUALITY = "gemini-2.5-pro";  // long-form content
 
+// Anthropic fallbacks, used only when the Gemini call throws.
+const CLAUDE_QUALITY = "claude-sonnet-4-5-20250929"; // long-form content
+const CLAUDE_FAST = "claude-haiku-4-5-20251001";     // approval / evaluation
+
+function stripFences(text: string): string {
+  let out = text.trim();
+  if (out.startsWith("```")) {
+    out = out.replace(/^```(?:\w+)?\s*/, "").replace(/\s*```\s*$/, "");
+  }
+  return out.trim();
+}
+
 async function callGemini(
   model: string,
   systemInstruction: string,
@@ -55,12 +68,55 @@ async function callGemini(
   const text = response.text;
   if (!text) throw new Error("Empty response from Gemini");
 
-  // Defensive: strip code fences if the model wraps JSON anyway
-  let out = text.trim();
-  if (out.startsWith("```")) {
-    out = out.replace(/^```(?:\w+)?\s*/, "").replace(/\s*```\s*$/, "");
+  return stripFences(text);
+}
+
+async function callAnthropic(
+  model: string,
+  systemInstruction: string,
+  userMessage: string,
+  maxTokens: number,
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
+  const client = new Anthropic({ apiKey });
+  const response = await client.messages.create({
+    model,
+    max_tokens: maxTokens,
+    system: `${systemInstruction} Return only valid JSON, no markdown fences.`,
+    messages: [{ role: "user", content: userMessage }],
+  });
+
+  const block = response.content.find((b) => b.type === "text");
+  const text = block && block.type === "text" ? block.text : "";
+  if (!text) throw new Error("Empty response from Anthropic");
+
+  return stripFences(text);
+}
+
+/**
+ * Try Gemini first; on any failure (rate limit, quota, outage) transparently
+ * fall back to the equivalent Claude model. If no ANTHROPIC_API_KEY is set,
+ * the original Gemini error propagates unchanged.
+ */
+async function callAI(
+  model: string,
+  systemInstruction: string,
+  userMessage: string,
+  opts: { thinking?: boolean; maxOutputTokens?: number } = {},
+): Promise<string> {
+  try {
+    return await callGemini(model, systemInstruction, userMessage, opts);
+  } catch (err) {
+    if (!process.env.ANTHROPIC_API_KEY) throw err;
+    console.warn(
+      `[ai-writer] Gemini (${model}) failed — falling back to Anthropic:`,
+      err instanceof Error ? err.message : err,
+    );
+    const claudeModel = model === MODEL_QUALITY ? CLAUDE_QUALITY : CLAUDE_FAST;
+    const maxTokens = Math.min(opts.maxOutputTokens ?? 8192, 16384);
+    return callAnthropic(claudeModel, systemInstruction, userMessage, maxTokens);
   }
-  return out.trim();
 }
 
 // === Public API ===
@@ -69,7 +125,7 @@ export async function generateArticleContent(
   keyword: string,
 ): Promise<GeneratedArticle> {
   const prompt = buildContentPrompt(keyword);
-  const raw = await callGemini(
+  const raw = await callAI(
     MODEL_QUALITY,
     "You are a recipe content generator. Return only valid JSON.",
     prompt,
@@ -84,7 +140,7 @@ export async function generateArticleContent(
     return parsed;
   } catch (err) {
     throw new Error(
-      `Failed to parse article content from Gemini: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to parse article content: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
@@ -96,7 +152,7 @@ export async function evaluatePinForAutopilot(context: {
   recentArticleTitles: string[];
 }): Promise<AutopilotEvaluation> {
   const prompt = buildAutopilotPrompt(context);
-  const raw = await callGemini(
+  const raw = await callAI(
     MODEL_FAST,
     "You are a recipe content strategist. Return only valid JSON.",
     prompt,
@@ -118,7 +174,7 @@ export async function evaluateKeyword(
   keyword: string,
 ): Promise<KeywordEvaluation> {
   const prompt = buildApprovalPrompt(keyword);
-  const raw = await callGemini(
+  const raw = await callAI(
     MODEL_FAST,
     "You are a keyword evaluator. Return only valid JSON.",
     prompt,
@@ -133,7 +189,7 @@ export async function evaluateKeyword(
     return parsed;
   } catch (err) {
     throw new Error(
-      `Failed to parse keyword evaluation from Gemini: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to parse keyword evaluation: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
