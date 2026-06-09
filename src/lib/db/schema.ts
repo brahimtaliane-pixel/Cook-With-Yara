@@ -27,6 +27,9 @@ export const articles = pgTable("articles", {
     .references(() => keywords.id)
     .notNull(),
   slug: text("slug").unique().notNull(),
+  articleNumber: integer("article_number")
+    .notNull()
+    .generatedByDefaultAsIdentity({ name: "articles_article_number_seq" }),
   title: text("title"),
   metaDescription: text("meta_description"),
   contentMdx: text("content_mdx"),

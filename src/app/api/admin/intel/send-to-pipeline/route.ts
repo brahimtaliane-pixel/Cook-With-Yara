@@ -6,7 +6,8 @@ import { generateSlug } from "@/lib/utils/slug";
 import { ArticleStatus, KeywordStatus } from "@/lib/constants";
 import { generateArticleContent } from "@/lib/services/ai-writer";
 import { generateHeroImage } from "@/lib/services/nano-banana";
-import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
+import { generatePinImageFullBleed } from "@/lib/services/canva";
+import { extractRecipeMeta } from "@/lib/utils/recipe-meta";
 import { getCanonicalUrl } from "@/lib/utils/seo";
 import { getBoardForArticle } from "@/lib/services/pinterest-boards";
 import { getNextPostingSlot } from "@/lib/pipeline/schedule";
@@ -179,26 +180,31 @@ export async function POST(request: Request) {
           .set({ status: ArticleStatus.PIN_GENERATING, updatedAt: new Date() })
           .where(eq(articles.id, newArticle.id));
 
+        const meta = extractRecipeMeta(
+          content.recipeJsonLd as Record<string, unknown> | null,
+        );
         const pinParams = {
           title: content.title,
           heroImageUrl,
+          topIngredients: meta.topIngredients,
+          servings: meta.servings,
+          cookTime: meta.cookTime,
+          eyebrow: meta.eyebrow,
+          subtitle: meta.subtitle,
         };
 
-        const [pngBuffer1, pngBuffer2] = await Promise.all([
-          generatePinImage(pinParams),
-          generatePinImageSimple(pinParams),
-        ]);
+        const pngBuffer = await generatePinImageFullBleed(pinParams);
 
-        const [blob1, blob2] = await Promise.all([
-          put(`recipes/${slug}/pin.png`, pngBuffer1, { access: "public", allowOverwrite: true }),
-          put(`recipes/${slug}/pin2.png`, pngBuffer2, { access: "public", allowOverwrite: true }),
-        ]);
+        const blob = await put(`recipes/${slug}/pin.png`, pngBuffer, {
+          access: "public",
+          allowOverwrite: true,
+        });
 
         await db
           .update(articles)
           .set({
-            pinImageUrl: blob1.url,
-            pinImageUrl2: blob2.url,
+            pinImageUrl: blob.url,
+            pinImageUrl2: blob.url,
             status: ArticleStatus.PIN_READY,
             updatedAt: new Date(),
           })
@@ -226,28 +232,17 @@ export async function POST(request: Request) {
           (content.recipeJsonLd as Record<string, unknown> | null)?.recipeCategory as string | undefined;
         const boardId = await getBoardForArticle(content.title, recipeCategory);
 
-        // Queue both pin designs for scheduled posting at optimal times
+        // Queue the D7 pin for scheduled posting at an optimal time
         const slot1 = await getNextPostingSlot();
         await db.insert(pinQueue).values({
           articleId: newArticle.id,
-          imageUrl: blob1.url,
-          pinDesign: 1,
+          imageUrl: blob.url,
+          pinDesign: 7,
           title: content.title,
           description: content.metaDescription,
           link: canonicalUrl,
           boardId,
           scheduledAt: slot1,
-        });
-        const slot2 = await getNextPostingSlot({ afterSlot: slot1 });
-        await db.insert(pinQueue).values({
-          articleId: newArticle.id,
-          imageUrl: blob2.url,
-          pinDesign: 2,
-          title: content.title,
-          description: content.metaDescription,
-          link: canonicalUrl,
-          boardId,
-          scheduledAt: slot2,
         });
 
         await db

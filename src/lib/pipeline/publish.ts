@@ -82,15 +82,15 @@ export async function publishAndPin(): Promise<{ processed: number }> {
       // Determine target Pinterest board(s)
       const primaryBoardId = await getBoardForArticle(article.title, recipeCategory);
 
-      // Queue both pin designs for scheduled posting at optimal times
+      // Queue the D7 pin for scheduled posting at an optimal time
       const slot1 = await getNextPostingSlot();
-      let lastSlot = slot1;
+      const lastSlot = slot1;
 
       if (article.pinImageUrl) {
         await db.insert(pinQueue).values({
           articleId: article.id,
           imageUrl: article.pinImageUrl,
-          pinDesign: 1,
+          pinDesign: 7,
           title: pinTitle,
           description: pinDescription,
           link: canonicalUrl,
@@ -98,22 +98,6 @@ export async function publishAndPin(): Promise<{ processed: number }> {
           altText,
           pinType: "original",
           scheduledAt: slot1,
-        });
-      }
-      if (article.pinImageUrl2) {
-        const slot2 = await getNextPostingSlot({ afterSlot: slot1 });
-        lastSlot = slot2;
-        await db.insert(pinQueue).values({
-          articleId: article.id,
-          imageUrl: article.pinImageUrl2,
-          pinDesign: 2,
-          title: pinTitle,
-          description: pinDescription,
-          link: canonicalUrl,
-          boardId: primaryBoardId,
-          altText,
-          pinType: "original",
-          scheduledAt: slot2,
         });
       }
 
@@ -128,12 +112,12 @@ export async function publishAndPin(): Promise<{ processed: number }> {
           const afterDate = new Date(lastSlot.getTime() + daysAfter * 24 * 60 * 60 * 1000);
           const secondarySlot = await getNextPostingSlot({ afterSlot: afterDate });
 
-          // Queue design 1 to secondary board
+          // Queue the D7 pin to secondary board
           if (article.pinImageUrl) {
             await db.insert(pinQueue).values({
               articleId: article.id,
               imageUrl: article.pinImageUrl,
-              pinDesign: 1,
+              pinDesign: 7,
               title: pinTitle,
               description: pinDescription,
               link: canonicalUrl,

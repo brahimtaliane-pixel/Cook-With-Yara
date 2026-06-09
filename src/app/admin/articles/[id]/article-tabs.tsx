@@ -215,6 +215,8 @@ const DESIGN_NAMES: Record<number, string> = {
   3: "Bold Overlay",
   4: "Card Style",
   5: "Minimal",
+  6: "Editorial",
+  7: "Full-Bleed Hero",
 };
 
 function PinActivity({ articleId, onPostedCount }: { articleId: string; onPostedCount?: (count: number) => void }) {

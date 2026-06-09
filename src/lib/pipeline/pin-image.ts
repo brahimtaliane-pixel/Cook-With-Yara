@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
 import { articles } from "@/lib/db/schema";
 import { ArticleStatus } from "@/lib/constants";
-import { generatePinImage, generatePinImageSimple } from "@/lib/services/canva";
+import { generatePinImageFullBleed } from "@/lib/services/canva";
 import { shouldRetry } from "@/lib/pipeline/base";
+import { extractRecipeMeta } from "@/lib/utils/recipe-meta";
 import { put } from "@vercel/blob";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -36,28 +37,33 @@ export async function createPinImage(): Promise<{ processed: number }> {
         throw new Error("No hero image URL found");
       }
 
+      const meta = extractRecipeMeta(
+        article.recipeJsonLd as Record<string, unknown> | null,
+      );
       const pinParams = {
         title: article.title || "Delicious Recipe",
         heroImageUrl: article.heroImageUrl,
+        articleNumber: article.articleNumber,
+        topIngredients: meta.topIngredients,
+        servings: meta.servings,
+        cookTime: meta.cookTime,
+        eyebrow: meta.eyebrow,
+        subtitle: meta.subtitle,
       };
 
-      // Generate both pin designs in parallel
-      const [pngBuffer1, pngBuffer2] = await Promise.all([
-        generatePinImage(pinParams),
-        generatePinImageSimple(pinParams),
-      ]);
+      // Single design: D7 full-bleed hero (the main design for all pins)
+      const pngBuffer = await generatePinImageFullBleed(pinParams);
 
-      // Upload both to Vercel Blob in parallel
-      const [blob1, blob2] = await Promise.all([
-        put(`recipes/${article.slug}/pin.png`, pngBuffer1, { access: "public", allowOverwrite: true }),
-        put(`recipes/${article.slug}/pin2.png`, pngBuffer2, { access: "public", allowOverwrite: true }),
-      ]);
+      const blob = await put(`recipes/${article.slug}/pin.png`, pngBuffer, {
+        access: "public",
+        allowOverwrite: true,
+      });
 
       await db
         .update(articles)
         .set({
-          pinImageUrl: blob1.url,
-          pinImageUrl2: blob2.url,
+          pinImageUrl: blob.url,
+          pinImageUrl2: blob.url,
           status: ArticleStatus.PIN_READY,
           updatedAt: new Date(),
         })

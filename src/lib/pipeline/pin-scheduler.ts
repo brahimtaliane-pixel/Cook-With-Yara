@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import { pinQueue } from "@/lib/db/schema";
-import { postPin } from "@/lib/services/pinterest-unified";
-import { getPinterestBoardId } from "@/lib/services/pinterest";
+import { createPin, getPinterestBoardId } from "@/lib/services/pinterest";
 import { getConfigValue, shouldRetry } from "@/lib/pipeline/base";
 import { ConfigKeys } from "@/lib/constants";
 import { eq, and, sql, lte, gte } from "drizzle-orm";
@@ -164,7 +163,7 @@ export async function processNextPin(runId: string): Promise<{ processed: number
 
     try {
       const boardId = await resolveBoardId(item.boardId);
-      const result = await postPin({
+      const pin = await createPin({
         boardId,
         title: item.title,
         description: item.description,
@@ -178,7 +177,7 @@ export async function processNextPin(runId: string): Promise<{ processed: number
         .set({
           status: "posted",
           postedAt: new Date(),
-          pinterestPinId: result.pinId,
+          pinterestPinId: pin.id,
         })
         .where(eq(pinQueue.id, item.id));
 

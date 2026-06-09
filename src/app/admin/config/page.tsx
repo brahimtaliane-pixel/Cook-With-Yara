@@ -316,7 +316,6 @@ function ConfigPageInner() {
 
   const pipelineEnabled = config[ConfigKeys.PIPELINE_ENABLED] === "true";
   const autopilotEnabled = config[ConfigKeys.AUTOPILOT_ENABLED] === "true";
-  const pinterestMode = config[ConfigKeys.PINTEREST_MODE] ?? "api";
 
   return (
     <div className="space-y-6">
@@ -447,14 +446,9 @@ function ConfigPageInner() {
       {/* Pinterest Posting */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Pinterest Posting
-            <Badge variant={pinterestMode === "direct" ? "secondary" : "default"}>
-              {pinterestMode === "direct" ? "Direct HTTP" : "API"}
-            </Badge>
-          </CardTitle>
+          <CardTitle>Pinterest Posting</CardTitle>
           <CardDescription>
-            Controls how pins get posted — via official API or direct session cookie
+            Controls how many pins get posted via the Pinterest API and when
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -487,35 +481,6 @@ function ConfigPageInner() {
               How many pins to post each cron run (every 15 min). 1 = safe &amp; natural, 3 = faster throughput.
             </p>
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="pinterest-mode">Posting Mode</Label>
-            <select
-              id="pinterest-mode"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              value={pinterestMode}
-              onChange={(e) => updateConfig(ConfigKeys.PINTEREST_MODE, e.target.value)}
-            >
-              <option value="api">API (Official — requires approved app)</option>
-              <option value="direct">Direct HTTP (Session cookie — no app needed)</option>
-            </select>
-          </div>
-
-          {pinterestMode === "direct" && (
-            <div className="space-y-2">
-              <Label htmlFor="pinterest-cookie">Session Cookie</Label>
-              <textarea
-                id="pinterest-cookie"
-                className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring font-mono"
-                placeholder="_pinterest_sess=YOUR_VALUE; csrftoken=YOUR_VALUE"
-                value={config[ConfigKeys.PINTEREST_SESSION_COOKIE] ?? ""}
-                onChange={(e) => updateConfig(ConfigKeys.PINTEREST_SESSION_COOKIE, e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Get from browser DevTools → Application → Cookies → pinterest.com. Paste the full cookie string.
-              </p>
-            </div>
-          )}
 
           <SchedulePicker
             value={config[ConfigKeys.PIN_POSTING_SCHEDULE] ?? ""}

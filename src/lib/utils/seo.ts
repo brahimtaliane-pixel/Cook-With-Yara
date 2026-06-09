@@ -142,7 +142,7 @@ export function generateOrganizationJsonLd() {
     "@type": "Organization",
     name: SITE_NAME,
     url: SITE_URL,
-    logo: `${SITE_URL}/mylogo.png`,
+    logo: `${SITE_URL}/logo.png`,
     description:
       "Mediterranean and Levantine recipes from Yara's kitchen.",
     sameAs: SOCIAL_PROFILES,

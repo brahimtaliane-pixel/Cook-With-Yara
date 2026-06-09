@@ -63,8 +63,6 @@ export const ConfigKeys = {
   AUTOPILOT_ENABLED: "autopilot_enabled",
   AUTOPILOT_MIN_SCORE: "autopilot_min_score",
   AUTOPILOT_MAX_PER_RUN: "autopilot_max_per_run",
-  PINTEREST_MODE: "pinterest_mode",
-  PINTEREST_SESSION_COOKIE: "pinterest_session_cookie",
   PINS_PER_CRON_RUN: "pins_per_cron_run",
   MAX_PINS_PER_DAY: "max_pins_per_day",
   PINTEREST_BOARD_MAP: "pinterest_board_map",

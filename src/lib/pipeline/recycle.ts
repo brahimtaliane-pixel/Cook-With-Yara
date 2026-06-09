@@ -7,11 +7,12 @@ import { generatePinDesign } from "@/lib/services/canva";
 import { generatePinterestCopy } from "@/lib/services/pinterest-copy";
 import { getBoardsForArticle } from "@/lib/services/pinterest-boards";
 import { getNextPostingSlot } from "@/lib/pipeline/schedule";
+import { extractRecipeMeta } from "@/lib/utils/recipe-meta";
 import { put } from "@vercel/blob";
 import { eq, and, sql, asc } from "drizzle-orm";
 
 const MAX_CANDIDATES_PER_RUN = 3;
-const AVAILABLE_DESIGNS = [3, 4, 5]; // New recycling-only designs
+const AVAILABLE_DESIGNS = [7]; // D7 full-bleed hero — the single active pin design
 
 export async function recyclePins(): Promise<{ processed: number }> {
   const enabled = (await getConfigValue(ConfigKeys.RECYCLE_ENABLED, "false")) === "true";
@@ -96,10 +97,19 @@ export async function recyclePins(): Promise<{ processed: number }> {
         designNum = AVAILABLE_DESIGNS[article.recycleCount % AVAILABLE_DESIGNS.length];
       }
 
+      // Get recipe metadata
+      const recipeJsonLd = article.recipeJsonLd as Record<string, unknown> | null;
+      const meta = extractRecipeMeta(recipeJsonLd);
+      const { recipeCategory, topIngredients, servings, cookTime } = meta;
+
       // Generate new pin image with the chosen design
       const pinBuffer = await generatePinDesign(designNum, {
         title: article.title || "Delicious Recipe",
         heroImageUrl: article.heroImageUrl,
+        articleNumber: article.articleNumber,
+        topIngredients,
+        servings,
+        cookTime,
       });
 
       // Upload to Vercel Blob
@@ -108,13 +118,6 @@ export async function recyclePins(): Promise<{ processed: number }> {
         pinBuffer,
         { access: "public" }
       );
-
-      // Get recipe metadata for Pinterest copy
-      const recipeJsonLd = article.recipeJsonLd as Record<string, unknown> | null;
-      const recipeCategory = (recipeJsonLd?.recipeCategory as string) ?? "";
-      const topIngredients = Array.isArray(recipeJsonLd?.recipeIngredient)
-        ? (recipeJsonLd.recipeIngredient as string[]).slice(0, 6)
-        : [];
 
       // Look up keyword
       let keywordText = "";

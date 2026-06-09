@@ -77,7 +77,7 @@ export async function POST(
       await db.insert(pinQueue).values({
         articleId: article.id,
         imageUrl: article.pinImageUrl,
-        pinDesign: 1,
+        pinDesign: 7,
         title: pinTitle,
         description: pinDescription,
         link,
@@ -85,23 +85,6 @@ export async function POST(
         altText,
         pinType: "original",
         scheduledAt: slot1,
-      });
-      queued++;
-    }
-
-    if (article.pinImageUrl2) {
-      const slot2 = await getNextPostingSlot({ afterSlot: slot1 });
-      await db.insert(pinQueue).values({
-        articleId: article.id,
-        imageUrl: article.pinImageUrl2,
-        pinDesign: 2,
-        title: pinTitle,
-        description: pinDescription,
-        link,
-        boardId,
-        altText,
-        pinType: "original",
-        scheduledAt: slot2,
       });
       queued++;
     }

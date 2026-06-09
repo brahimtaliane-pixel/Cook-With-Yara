@@ -1,1062 +1,718 @@
 import satori from "satori";
 import sharp from "sharp";
-import { readFile } from "fs/promises";
-import { join } from "path";
 
 // === Types ===
 
 export interface PinImageParams {
   title: string;
   heroImageUrl: string;
+  articleNumber?: number;
+  topIngredients?: string[];
+  servings?: string;
+  cookTime?: string;
+  // D6 editorial-only fields
+  eyebrow?: string;
+  subtitle?: string;
 }
 
-// === Brand colors ===
+// === Palette (warm food-blog tones, matching the reference) ===
 
-const BRAND = {
-  primary: "#9A3412",
-  warm: "#FEF7ED",
-  accent: "#C2410C",
-  gold: "#D97706",
-  foreground: "#1C1917",
-  cream: "#FFFBF5",
+const W = 1000;
+const H = 1500;
+
+const COLORS = {
+  white: "#FFFFFF",
+  cream: "#F5EFE3",
+  titleText: "#5C2A19", // deep cocoa
+  urlBg: "#2D1810",     // dark espresso
+  urlText: "#F5EFE3",
+  gold: "#E8B547",       // brand pop accent (kept for variants)
+  forest: "#1F5F4A",     // brand green (kept for variant)
 };
+
+// D6 — editorial luxury palette
+const EDITORIAL = {
+  cream: "#F7F3EE",
+  warmBrown: "#4F3422",
+  goldenHoney: "#D9A441",
+  softCoral: "#D97A7A",
+};
+
+const URL_WORDMARK = "COOKWITHYARA.COM";
 
 // === Font loading ===
 
-let dmSansCache: ArrayBuffer | null = null;
-let playfairCache: ArrayBuffer | null = null;
+let bowlby: ArrayBuffer | null = null;
+let anton: ArrayBuffer | null = null;
+let inter700: ArrayBuffer | null = null;
+let playfair700: ArrayBuffer | null = null;
+let playfairItalic: ArrayBuffer | null = null;
 
 async function loadFont(url: string): Promise<ArrayBuffer> {
   const cssRes = await fetch(url);
   const css = await cssRes.text();
   const match = css.match(/src:\s*url\(([^)]+)\)/);
-  if (!match?.[1]) throw new Error("Could not extract font URL");
+  if (!match?.[1]) throw new Error(`Could not extract font URL from ${url}`);
   const fontRes = await fetch(match[1]);
   return fontRes.arrayBuffer();
 }
 
-async function getDmSans(): Promise<ArrayBuffer> {
-  if (dmSansCache) return dmSansCache;
-  dmSansCache = await loadFont(
-    "https://fonts.googleapis.com/css2?family=DM+Sans:wght@600&display=swap",
+async function getBowlby(): Promise<ArrayBuffer> {
+  if (bowlby) return bowlby;
+  bowlby = await loadFont(
+    "https://fonts.googleapis.com/css2?family=Bowlby+One&display=swap",
   );
-  return dmSansCache;
+  return bowlby;
 }
 
-async function getPlayfair(): Promise<ArrayBuffer> {
-  if (playfairCache) return playfairCache;
-  playfairCache = await loadFont(
+async function getAnton(): Promise<ArrayBuffer> {
+  if (anton) return anton;
+  anton = await loadFont(
+    "https://fonts.googleapis.com/css2?family=Anton&display=swap",
+  );
+  return anton;
+}
+
+async function getInter700(): Promise<ArrayBuffer> {
+  if (inter700) return inter700;
+  inter700 = await loadFont(
+    "https://fonts.googleapis.com/css2?family=Inter:wght@700&display=swap",
+  );
+  return inter700;
+}
+
+async function getPlayfair700(): Promise<ArrayBuffer> {
+  if (playfair700) return playfair700;
+  playfair700 = await loadFont(
     "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap",
   );
-  return playfairCache;
+  return playfair700;
 }
 
-// === Logo loading ===
+async function getPlayfairItalic(): Promise<ArrayBuffer> {
+  if (playfairItalic) return playfairItalic;
+  playfairItalic = await loadFont(
+    "https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,500&display=swap",
+  );
+  return playfairItalic;
+}
 
-let logoDataUriCache: string | null = null;
+// === Element helpers ===
 
-async function getLogoDataUri(): Promise<string> {
-  if (logoDataUriCache) return logoDataUriCache;
-  try {
-    const logoPath = join(process.cwd(), "public", "mylogo.png");
-    const logoBuffer = await readFile(logoPath);
-    logoDataUriCache = `data:image/png;base64,${logoBuffer.toString("base64")}`;
-  } catch {
-    logoDataUriCache = "";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type El = any;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function div(style: Record<string, any>, children?: El | El[]): El {
+  return {
+    type: "div",
+    props: { style, ...(children !== undefined ? { children } : {}) },
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function img(src: string, style: Record<string, any>): El {
+  return { type: "img", props: { src, style } };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function text(content: string, style: Record<string, any>): El {
+  return { type: "div", props: { style, children: content } };
+}
+
+// === Title sizing — Bowlby One is wide; we shrink to fit the longest word ===
+
+function titleSize(title: string, max = 90, min = 46): number {
+  const longestWord = title
+    .split(/\s+/)
+    .reduce((a, b) => (a.length > b.length ? a : b), "");
+  const wordLen = Math.max(longestWord.length, 1);
+
+  // Bowlby One roughly 0.65 × fontSize per char for uppercase.
+  // Title text area is ~900px (1000 - 50px each side).
+  const TEXT_AREA = 900;
+  const CHAR_RATIO = 0.65;
+  const maxByWord = Math.floor(TEXT_AREA / wordLen / CHAR_RATIO);
+
+  // Also scale down for very long titles
+  const len = title.length;
+  let byLength: number;
+  if (len > 70) byLength = min;
+  else if (len > 50) byLength = Math.round(min + (max - min) * 0.5);
+  else if (len > 30) byLength = Math.round(min + (max - min) * 0.8);
+  else byLength = max;
+
+  return Math.min(byLength, maxByWord);
+}
+
+// Photo strip — full-width photo with a vertical position hint so the two
+// strips in a pin can show different portions of the same source image.
+function photoStrip(
+  src: string,
+  height: number,
+  position: "top" | "center" | "bottom" = "center",
+): El {
+  return div(
+    {
+      width: `${W}px`,
+      height: `${height}px`,
+      display: "flex",
+      overflow: "hidden",
+    },
+    img(src, {
+      width: `${W}px`,
+      height: `${height}px`,
+      objectFit: "cover",
+      objectPosition: `center ${position}`,
+    }),
+  );
+}
+
+// White title band with chunky uppercase title.
+function titleBand(
+  title: string,
+  height: number,
+  opts: { bg?: string; color?: string } = {},
+): El {
+  return div(
+    {
+      width: `${W}px`,
+      height: `${height}px`,
+      backgroundColor: opts.bg ?? COLORS.white,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      padding: "20px 50px",
+    },
+    text(title.toUpperCase(), {
+      fontFamily: "Bowlby One",
+      fontSize: `${titleSize(title)}px`,
+      color: opts.color ?? COLORS.titleText,
+      lineHeight: 1.0,
+      textAlign: "center",
+      letterSpacing: "-1px",
+    }),
+  );
+}
+
+// Dark URL bar.
+function urlBar(height = 80, bg = COLORS.urlBg, color = COLORS.urlText): El {
+  return div(
+    {
+      width: `${W}px`,
+      height: `${height}px`,
+      backgroundColor: bg,
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    text(URL_WORDMARK, {
+      fontFamily: "Inter",
+      fontSize: "22px",
+      fontWeight: 700,
+      color,
+      letterSpacing: "6px",
+    }),
+  );
+}
+
+// === D1 — Reference layout: photo / title-band / photo / url-bar ===
+
+function StackedPin({ title, heroImageUrl }: PinImageParams): El {
+  const URL_H = 80;
+  const TITLE_H = 380;
+  const PHOTO_AREA = H - URL_H - TITLE_H;
+  const TOP_H = Math.round(PHOTO_AREA * 0.6);
+  const BOT_H = PHOTO_AREA - TOP_H;
+
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: COLORS.white,
+    },
+    [
+      photoStrip(heroImageUrl, TOP_H, "top"),
+      titleBand(title, TITLE_H),
+      photoStrip(heroImageUrl, BOT_H, "bottom"),
+      urlBar(URL_H),
+    ],
+  );
+}
+
+// === D2 — Inverted: bottom photo is the big one ===
+
+function InvertedStackedPin({ title, heroImageUrl }: PinImageParams): El {
+  const URL_H = 80;
+  const TITLE_H = 360;
+  const PHOTO_AREA = H - URL_H - TITLE_H;
+  const TOP_H = Math.round(PHOTO_AREA * 0.35);
+  const BOT_H = PHOTO_AREA - TOP_H;
+
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: COLORS.white,
+    },
+    [
+      photoStrip(heroImageUrl, TOP_H, "top"),
+      titleBand(title, TITLE_H),
+      photoStrip(heroImageUrl, BOT_H, "bottom"),
+      urlBar(URL_H),
+    ],
+  );
+}
+
+// === D3 — Title on top, then two photos stacked ===
+
+function TitleTopPin({ title, heroImageUrl }: PinImageParams): El {
+  const URL_H = 80;
+  const TITLE_H = 400;
+  const PHOTO_AREA = H - URL_H - TITLE_H;
+  const TOP_H = Math.round(PHOTO_AREA * 0.55);
+  const BOT_H = PHOTO_AREA - TOP_H;
+
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: COLORS.white,
+    },
+    [
+      titleBand(title, TITLE_H),
+      photoStrip(heroImageUrl, TOP_H, "top"),
+      photoStrip(heroImageUrl, BOT_H, "bottom"),
+      urlBar(URL_H),
+    ],
+  );
+}
+
+// === D4 — Same structure but with cream band + brand sage stripe accents ===
+
+function CreamBandPin({ title, heroImageUrl }: PinImageParams): El {
+  const URL_H = 80;
+  const TITLE_H = 380;
+  const PHOTO_AREA = H - URL_H - TITLE_H;
+  const TOP_H = Math.round(PHOTO_AREA * 0.6);
+  const BOT_H = PHOTO_AREA - TOP_H;
+
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: COLORS.cream,
+    },
+    [
+      photoStrip(heroImageUrl, TOP_H, "top"),
+      titleBand(title, TITLE_H, { bg: COLORS.cream }),
+      photoStrip(heroImageUrl, BOT_H, "bottom"),
+      urlBar(URL_H),
+    ],
+  );
+}
+
+// === D5 — Same structure but the URL bar + title band use brand forest green ===
+
+function ForestPin({ title, heroImageUrl }: PinImageParams): El {
+  const URL_H = 80;
+  const TITLE_H = 380;
+  const PHOTO_AREA = H - URL_H - TITLE_H;
+  const TOP_H = Math.round(PHOTO_AREA * 0.6);
+  const BOT_H = PHOTO_AREA - TOP_H;
+
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: COLORS.white,
+    },
+    [
+      photoStrip(heroImageUrl, TOP_H, "top"),
+      titleBand(title, TITLE_H, { bg: COLORS.white, color: COLORS.forest }),
+      photoStrip(heroImageUrl, BOT_H, "bottom"),
+      urlBar(URL_H, COLORS.forest, COLORS.white),
+    ],
+  );
+}
+
+// === D6 — Editorial luxury (premium food-blog layout) ===
+
+// Playfair Display is narrower than Bowlby; allow larger sizes for short titles.
+function serifTitleSize(title: string, max = 82, min = 46): number {
+  const longestWord = title
+    .split(/\s+/)
+    .reduce((a, b) => (a.length > b.length ? a : b), "");
+  const wordLen = Math.max(longestWord.length, 1);
+
+  const TEXT_AREA = 840; // 1000 − 80px padding each side
+  const CHAR_RATIO = 0.52;
+  const maxByWord = Math.floor(TEXT_AREA / wordLen / CHAR_RATIO);
+
+  const len = title.length;
+  let byLength: number;
+  if (len > 60) byLength = min;
+  else if (len > 40) byLength = Math.round(min + (max - min) * 0.6);
+  else if (len > 25) byLength = Math.round(min + (max - min) * 0.85);
+  else byLength = max;
+
+  return Math.min(byLength, maxByWord);
+}
+
+function EditorialPin({
+  title,
+  heroImageUrl,
+  eyebrow,
+  subtitle,
+}: PinImageParams): El {
+  const PHOTO_TOP_H = 675; // 45%
+  const MIDDLE_H = 450;    // 30%
+  const PHOTO_BOT_H = 375; // 25%
+
+  const eyebrowText = (eyebrow ?? "RECIPE").toUpperCase();
+  const sub = subtitle ?? "";
+  const titleFs = serifTitleSize(title);
+
+  // Middle band children
+  const middleChildren: El[] = [
+    // top decorative line
+    div({
+      width: "56px",
+      height: "1px",
+      backgroundColor: EDITORIAL.goldenHoney,
+      display: "flex",
+      marginBottom: "18px",
+    }),
+    text(eyebrowText, {
+      fontFamily: "Inter",
+      fontSize: "20px",
+      fontWeight: 700,
+      color: EDITORIAL.goldenHoney,
+      letterSpacing: "8px",
+      marginBottom: "14px",
+    }),
+    text("★★★★★", {
+      fontFamily: "Inter",
+      fontSize: "22px",
+      color: EDITORIAL.goldenHoney,
+      letterSpacing: "4px",
+      marginBottom: "22px",
+    }),
+    text(title, {
+      fontFamily: "Playfair Display",
+      fontSize: `${titleFs}px`,
+      color: EDITORIAL.warmBrown,
+      lineHeight: 1.05,
+      textAlign: "center",
+      fontWeight: 700,
+      marginBottom: sub ? "18px" : "0",
+    }),
+  ];
+
+  if (sub) {
+    middleChildren.push(
+      text(sub, {
+        fontFamily: "Playfair Display Italic",
+        fontStyle: "italic",
+        fontSize: "30px",
+        color: EDITORIAL.softCoral,
+        textAlign: "center",
+        marginBottom: "16px",
+      }),
+      div({
+        width: "100px",
+        height: "1px",
+        backgroundColor: EDITORIAL.goldenHoney,
+        display: "flex",
+      }),
+    );
   }
-  return logoDataUriCache;
-}
 
-// === Helpers ===
-
-function star() {
-  return {
-    type: "svg",
-    props: {
-      width: "22",
-      height: "22",
-      viewBox: "0 0 24 24",
-      children: {
-        type: "path",
-        props: {
-          d: "M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z",
-          fill: BRAND.gold,
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      flexDirection: "column",
+      backgroundColor: EDITORIAL.cream,
+      position: "relative",
+    },
+    [
+      photoStrip(heroImageUrl, PHOTO_TOP_H, "center"),
+      div(
+        {
+          width: `${W}px`,
+          height: `${MIDDLE_H}px`,
+          backgroundColor: EDITORIAL.cream,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: "30px 80px",
         },
-      },
-    },
-  };
+        middleChildren,
+      ),
+      photoStrip(heroImageUrl, PHOTO_BOT_H, "bottom"),
+      // Branding badge — absolute, bottom-centered
+      div(
+        {
+          position: "absolute",
+          bottom: "28px",
+          left: "330px",
+          width: "340px",
+          height: "52px",
+          backgroundColor: "#FFFFFF",
+          borderRadius: "26px",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          boxShadow: "0 6px 20px rgba(0,0,0,0.18)",
+        },
+        text(URL_WORDMARK, {
+          fontFamily: "Inter",
+          fontSize: "17px",
+          fontWeight: 700,
+          color: EDITORIAL.warmBrown,
+          letterSpacing: "5px",
+        }),
+      ),
+    ],
+  );
 }
 
-function decorativeDot(color: string, size = 8) {
-  return {
-    type: "div",
-    props: {
-      style: {
-        width: `${size}px`,
-        height: `${size}px`,
-        borderRadius: "50%",
-        backgroundColor: color,
-      },
-    },
-  };
+// === D7 — Full-bleed hero with gradient + minimal lower-third text ===
+
+// Headline sizing for full-bleed pin (large uppercase serif).
+// Picks the largest size that lets the WHOLE headline sit on one line —
+// the constraint is total width, not just the longest word.
+function fullBleedTitleSize(title: string, max = 110, min = 44): number {
+  const TEXT_AREA = 900; // 1000 − 50px padding each side
+  const CHAR_RATIO = 0.66; // Playfair Display bold uppercase: wide glyphs
+
+  const longestWord = title
+    .split(/\s+/)
+    .reduce((a, b) => (a.length > b.length ? a : b), "");
+  const wordLen = Math.max(longestWord.length, 1);
+  const maxByWord = Math.floor(TEXT_AREA / wordLen / CHAR_RATIO);
+
+  const len = Math.max(title.length, 1);
+  const maxByTotal = Math.floor(TEXT_AREA / len / CHAR_RATIO);
+
+  return Math.max(min, Math.min(max, maxByWord, maxByTotal));
 }
 
-function decorativeLine(width: number, color: string) {
-  return {
-    type: "div",
-    props: {
-      style: {
-        width: `${width}px`,
-        height: "2px",
-        backgroundColor: color,
-        borderRadius: "1px",
-      },
-    },
-  };
+// Strip noise from the article title so the headline reads cleanly.
+function cleanHeadline(title: string): string {
+  // Drop anything after the first colon — typical pattern: "Lemon Rhubarb Loaf: Zesty & Tart..."
+  return title.split(":")[0].trim();
 }
 
-// === Pin image layout ===
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PinLayout({
+function FullBleedHeroPin({
   title,
   heroImageUrl,
-  logoDataUri,
-}: {
-  title: string;
-  heroImageUrl: string;
-  logoDataUri: string;
-}): any {
-  const W = 1000;
-  const H = 1500;
-  const PAD = 28;
-  const INNER_W = W - PAD * 2;
-  const TOP_IMG_H = 530;
-  const BAND_H = 310;
-  const BOT_IMG_H = H - PAD * 2 - TOP_IMG_H - BAND_H;
-  const titleSize = title.length > 30 ? 50 : title.length > 20 ? 56 : 62;
+  eyebrow,
+  subtitle,
+}: PinImageParams): El {
+  const eyebrowText = (eyebrow ?? "EASY RECIPE").toUpperCase();
+  const sub = subtitle ?? "";
+  const headline = cleanHeadline(title).toUpperCase();
+  const titleFs = fullBleedTitleSize(headline);
 
-  return {
-    type: "div",
-    props: {
-      style: {
-        width: `${W}px`,
-        height: `${H}px`,
-        display: "flex",
-        position: "relative",
-        overflow: "hidden",
-        backgroundColor: BRAND.cream,
-        padding: `${PAD}px`,
-      },
-      children: [
-        // ── Inner frame with rounded corners ──
-        {
-          type: "div",
-          props: {
-            style: {
-              width: `${INNER_W}px`,
-              height: `${H - PAD * 2}px`,
-              display: "flex",
-              flexDirection: "column",
-              overflow: "hidden",
-              borderRadius: "24px",
-              border: `3px solid ${BRAND.primary}22`,
-              position: "relative",
-            },
-            children: [
-              // ── Top image (zoomed in) ──
-              {
-                type: "div",
-                props: {
-                  style: {
-                    width: `${INNER_W}px`,
-                    height: `${TOP_IMG_H}px`,
-                    overflow: "hidden",
-                    display: "flex",
-                    position: "relative",
-                  },
-                  children: [
-                    {
-                      type: "img",
-                      props: {
-                        src: heroImageUrl,
-                        style: {
-                          width: `${INNER_W * 1.35}px`,
-                          height: `${TOP_IMG_H * 1.35}px`,
-                          objectFit: "cover",
-                          marginLeft: `${-(INNER_W * 0.17)}px`,
-                          marginTop: `${-(TOP_IMG_H * 0.12)}px`,
-                        },
-                      },
-                    },
-                    // Soft bottom fade
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          position: "absolute",
-                          bottom: 0,
-                          left: 0,
-                          width: `${INNER_W}px`,
-                          height: "100px",
-                          background: `linear-gradient(to bottom, rgba(255,251,245,0) 0%, ${BRAND.cream} 100%)`,
-                        },
-                      },
-                    },
-                  ],
-                },
-              },
-
-              // ── Title band ──
-              {
-                type: "div",
-                props: {
-                  style: {
-                    width: `${INNER_W}px`,
-                    height: `${BAND_H}px`,
-                    backgroundColor: BRAND.cream,
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    padding: "0 60px",
-                    position: "relative",
-                  },
-                  children: [
-                    // Top decorative row: line — dot — line
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                          marginBottom: "14px",
-                        },
-                        children: [
-                          decorativeLine(60, `${BRAND.primary}44`),
-                          decorativeDot(BRAND.primary, 7),
-                          decorativeLine(60, `${BRAND.primary}44`),
-                        ],
-                      },
-                    },
-
-                    // "Try This Recipe"
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          fontFamily: "DM Sans",
-                          color: BRAND.accent,
-                          fontSize: "18px",
-                          fontWeight: 600,
-                          letterSpacing: "5px",
-                          textTransform: "uppercase",
-                          marginBottom: "8px",
-                        },
-                        children: "Try This Recipe",
-                      },
-                    },
-
-                    // Stars
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          display: "flex",
-                          gap: "5px",
-                          marginBottom: "14px",
-                        },
-                        children: Array.from({ length: 5 }).map(() => star()),
-                      },
-                    },
-
-                    // Title
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          fontFamily: "Playfair Display",
-                          color: BRAND.foreground,
-                          fontSize: `${titleSize}px`,
-                          fontWeight: 700,
-                          lineHeight: 1.12,
-                          textAlign: "center",
-                          maxWidth: "820px",
-                        },
-                        children: title,
-                      },
-                    },
-
-                    // Bottom decorative row
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "12px",
-                          marginTop: "18px",
-                        },
-                        children: [
-                          decorativeLine(60, `${BRAND.primary}44`),
-                          decorativeDot(BRAND.primary, 7),
-                          decorativeLine(60, `${BRAND.primary}44`),
-                        ],
-                      },
-                    },
-                  ],
-                },
-              },
-
-              // ── Bottom image (zoomed out) ──
-              {
-                type: "div",
-                props: {
-                  style: {
-                    width: `${INNER_W}px`,
-                    height: `${BOT_IMG_H}px`,
-                    overflow: "hidden",
-                    display: "flex",
-                    position: "relative",
-                  },
-                  children: [
-                    // Soft top fade
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: `${INNER_W}px`,
-                          height: "80px",
-                          background: `linear-gradient(to bottom, ${BRAND.cream} 0%, rgba(255,251,245,0) 100%)`,
-                        },
-                      },
-                    },
-                    {
-                      type: "img",
-                      props: {
-                        src: heroImageUrl,
-                        style: {
-                          width: `${INNER_W}px`,
-                          height: `${BOT_IMG_H + 40}px`,
-                          objectFit: "cover",
-                        },
-                      },
-                    },
-                    // Dark bottom overlay for URL
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          position: "absolute",
-                          bottom: 0,
-                          left: 0,
-                          width: `${INNER_W}px`,
-                          height: "80px",
-                          background:
-                            "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.45) 100%)",
-                        },
-                      },
-                    },
-                    // Website URL pill
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          position: "absolute",
-                          bottom: "16px",
-                          left: 0,
-                          width: `${INNER_W}px`,
-                          display: "flex",
-                          justifyContent: "center",
-                        },
-                        children: {
-                          type: "div",
-                          props: {
-                            style: {
-                              backgroundColor: "rgba(255, 251, 245, 0.92)",
-                              borderRadius: "20px",
-                              padding: "7px 24px",
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "8px",
-                            },
-                            children: [
-                              ...(logoDataUri
-                                ? [
-                                    {
-                                      type: "img",
-                                      props: {
-                                        src: logoDataUri,
-                                        style: { height: "22px" },
-                                      },
-                                    },
-                                  ]
-                                : []),
-                              {
-                                type: "div",
-                                props: {
-                                  style: {
-                                    fontFamily: "DM Sans",
-                                    color: BRAND.primary,
-                                    fontSize: "16px",
-                                    fontWeight: 600,
-                                    letterSpacing: "0.5px",
-                                  },
-                                  children: "cookwithyara.com",
-                                },
-                              },
-                            ],
-                          },
-                        },
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      ],
+  return div(
+    {
+      width: `${W}px`,
+      height: `${H}px`,
+      display: "flex",
+      position: "relative",
+      backgroundColor: "#1a1208",
     },
-  };
-}
-
-// === Design 2: Full image + logo ===
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PinLayoutSimple({
-  heroImageUrl,
-  logoDataUri,
-}: {
-  heroImageUrl: string;
-  logoDataUri: string;
-}): any {
-  const W = 1000;
-  const H = 1500;
-
-  return {
-    type: "div",
-    props: {
-      style: {
+    [
+      // Full-bleed hero image
+      img(heroImageUrl, {
+        position: "absolute",
+        top: "0px",
+        left: "0px",
         width: `${W}px`,
         height: `${H}px`,
-        display: "flex",
-        position: "relative",
-        overflow: "hidden",
-        backgroundColor: "#000",
-      },
-      children: [
-        // Full-bleed image
-        {
-          type: "img",
-          props: {
-            src: heroImageUrl,
-            style: {
-              width: `${W}px`,
-              height: `${H}px`,
-              objectFit: "cover",
-            },
-          },
-        },
-        // Subtle dark gradient at bottom for logo visibility
-        {
-          type: "div",
-          props: {
-            style: {
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              width: `${W}px`,
-              height: "120px",
-              background:
-                "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 100%)",
-            },
-          },
-        },
-        // Logo pill at bottom center
-        ...(logoDataUri
-          ? [
-              {
-                type: "div",
-                props: {
-                  style: {
-                    position: "absolute",
-                    bottom: "24px",
-                    left: 0,
-                    width: `${W}px`,
-                    display: "flex",
-                    justifyContent: "center",
-                  },
-                  children: {
-                    type: "div",
-                    props: {
-                      style: {
-                        backgroundColor: "rgba(255, 251, 245, 0.92)",
-                        borderRadius: "20px",
-                        padding: "8px 24px",
-                        display: "flex",
-                        alignItems: "center",
-                      },
-                      children: {
-                        type: "img",
-                        props: {
-                          src: logoDataUri,
-                          style: { height: "30px" },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-            ]
-          : []),
-      ],
-    },
-  };
-}
+        objectFit: "cover",
+        objectPosition: "center center",
+      }),
 
-// === Design 3: Bold Overlay — full-bleed image with dark gradient + large white title ===
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PinLayoutBoldOverlay({
-  title,
-  heroImageUrl,
-  logoDataUri,
-}: {
-  title: string;
-  heroImageUrl: string;
-  logoDataUri: string;
-}): any {
-  const W = 1000;
-  const H = 1500;
-  const titleSize = title.length > 40 ? 52 : title.length > 25 ? 60 : 68;
-
-  return {
-    type: "div",
-    props: {
-      style: {
+      // Dark gradient overlay — fades from transparent at the top to dark at the bottom
+      div({
+        position: "absolute",
+        left: "0px",
+        bottom: "0px",
         width: `${W}px`,
-        height: `${H}px`,
+        height: "780px",
         display: "flex",
-        position: "relative",
-        overflow: "hidden",
-      },
-      children: [
-        // Full-bleed image
-        {
-          type: "img",
-          props: {
-            src: heroImageUrl,
-            style: {
-              width: `${W}px`,
-              height: `${H}px`,
-              objectFit: "cover",
-              position: "absolute",
-              top: 0,
-              left: 0,
-            },
-          },
-        },
-        // Dark gradient overlay on bottom third
-        {
-          type: "div",
-          props: {
-            style: {
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              width: `${W}px`,
-              height: `${Math.round(H * 0.45)}px`,
-              background:
-                "linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.75) 50%, rgba(0,0,0,0.9) 100%)",
-            },
-          },
-        },
-        // Title + branding at bottom
-        {
-          type: "div",
-          props: {
-            style: {
-              position: "absolute",
-              bottom: "60px",
-              left: "50px",
-              right: "50px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "20px",
-            },
-            children: [
-              {
-                type: "div",
-                props: {
-                  style: {
-                    fontFamily: "Playfair Display",
-                    color: "#FFFFFF",
-                    fontSize: `${titleSize}px`,
-                    fontWeight: 700,
-                    lineHeight: 1.15,
-                    textShadow: "0 2px 8px rgba(0,0,0,0.3)",
-                  },
-                  children: title,
-                },
-              },
-              {
-                type: "div",
-                props: {
-                  style: {
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  },
-                  children: [
-                    ...(logoDataUri
-                      ? [
-                          {
-                            type: "img",
-                            props: {
-                              src: logoDataUri,
-                              style: { height: "24px" },
-                            },
-                          },
-                        ]
-                      : []),
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          fontFamily: "DM Sans",
-                          color: "rgba(255,255,255,0.85)",
-                          fontSize: "16px",
-                          fontWeight: 600,
-                        },
-                        children: "cookwithyara.com",
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  };
-}
+        backgroundImage:
+          "linear-gradient(180deg, rgba(20,12,5,0) 0%, rgba(20,12,5,0.45) 40%, rgba(20,12,5,0.92) 100%)",
+      }),
 
-// === Design 4: Card Style — white card with image top 60%, title bottom 40% ===
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PinLayoutCard({
-  title,
-  heroImageUrl,
-  logoDataUri,
-}: {
-  title: string;
-  heroImageUrl: string;
-  logoDataUri: string;
-}): any {
-  const W = 1000;
-  const H = 1500;
-  const PAD = 40;
-  const CARD_W = W - PAD * 2;
-  const CARD_H = H - PAD * 2;
-  const IMG_H = Math.round(CARD_H * 0.58);
-  const TEXT_H = CARD_H - IMG_H;
-  const titleSize = title.length > 40 ? 46 : title.length > 25 ? 52 : 58;
-
-  return {
-    type: "div",
-    props: {
-      style: {
-        width: `${W}px`,
-        height: `${H}px`,
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#F5F0EB",
-        padding: `${PAD}px`,
-      },
-      children: {
-        type: "div",
-        props: {
-          style: {
-            width: `${CARD_W}px`,
-            height: `${CARD_H}px`,
+      // Text content stack — bottom of canvas
+      div(
+        {
+          position: "absolute",
+          left: "0px",
+          bottom: "0px",
+          width: `${W}px`,
+          padding: "0 50px 110px 50px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "flex-end",
+        },
+        [
+          div({
+            width: "52px",
+            height: "1px",
+            backgroundColor: EDITORIAL.goldenHoney,
             display: "flex",
-            flexDirection: "column",
-            borderRadius: "20px",
-            overflow: "hidden",
-            backgroundColor: "#FFFFFF",
-            boxShadow: "0 8px 30px rgba(0,0,0,0.12)",
-          },
-          children: [
-            // Image area
-            {
-              type: "div",
-              props: {
-                style: {
-                  width: `${CARD_W}px`,
-                  height: `${IMG_H}px`,
-                  overflow: "hidden",
-                  display: "flex",
-                },
-                children: {
-                  type: "img",
-                  props: {
-                    src: heroImageUrl,
-                    style: {
-                      width: `${CARD_W}px`,
-                      height: `${IMG_H + 20}px`,
-                      objectFit: "cover",
-                    },
-                  },
-                },
-              },
-            },
-            // Text area
-            {
-              type: "div",
-              props: {
-                style: {
-                  width: `${CARD_W}px`,
-                  height: `${TEXT_H}px`,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "center",
-                  alignItems: "center",
-                  padding: "0 50px",
-                  gap: "20px",
-                },
-                children: [
-                  {
-                    type: "div",
-                    props: {
-                      style: {
-                        fontFamily: "DM Sans",
-                        color: BRAND.accent,
-                        fontSize: "15px",
-                        fontWeight: 600,
-                        letterSpacing: "4px",
-                        textTransform: "uppercase",
-                      },
-                      children: "RECIPE",
-                    },
-                  },
-                  {
-                    type: "div",
-                    props: {
-                      style: {
-                        fontFamily: "Playfair Display",
-                        color: BRAND.foreground,
-                        fontSize: `${titleSize}px`,
-                        fontWeight: 700,
-                        lineHeight: 1.15,
-                        textAlign: "center",
-                      },
-                      children: title,
-                    },
-                  },
-                  {
-                    type: "div",
-                    props: {
-                      style: {
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      },
-                      children: [
-                        ...(logoDataUri
-                          ? [
-                              {
-                                type: "img",
-                                props: {
-                                  src: logoDataUri,
-                                  style: { height: "20px" },
-                                },
-                              },
-                            ]
-                          : []),
-                        {
-                          type: "div",
-                          props: {
-                            style: {
-                              fontFamily: "DM Sans",
-                              color: BRAND.primary,
-                              fontSize: "14px",
-                              fontWeight: 600,
-                            },
-                            children: "cookwithyara.com",
-                          },
-                        },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-          ],
+            marginBottom: "18px",
+          }),
+          text(eyebrowText, {
+            fontFamily: "Inter",
+            fontSize: "20px",
+            fontWeight: 700,
+            color: EDITORIAL.goldenHoney,
+            letterSpacing: "8px",
+            marginBottom: "26px",
+          }),
+          text(headline, {
+            fontFamily: "Playfair Display",
+            fontSize: `${titleFs}px`,
+            fontWeight: 700,
+            color: "#FFFFFF",
+            lineHeight: 1.02,
+            textAlign: "center",
+            letterSpacing: "0px",
+            marginBottom: sub ? "22px" : "0px",
+          }),
+          ...(sub
+            ? [
+                text(sub, {
+                  fontFamily: "Inter",
+                  fontSize: "22px",
+                  fontWeight: 700,
+                  color: "#F7F3EE",
+                  letterSpacing: "5px",
+                  textAlign: "center",
+                }),
+              ]
+            : []),
+        ],
+      ),
+
+      // URL at very bottom, centered
+      div(
+        {
+          position: "absolute",
+          bottom: "40px",
+          left: "0px",
+          width: `${W}px`,
+          display: "flex",
+          justifyContent: "center",
         },
-      },
-    },
-  };
+        text(URL_WORDMARK, {
+          fontFamily: "Inter",
+          fontSize: "14px",
+          fontWeight: 700,
+          color: "rgba(247, 243, 238, 0.78)",
+          letterSpacing: "6px",
+        }),
+      ),
+    ],
+  );
 }
 
-// === Design 5: Minimal — colored accent bar, small image, prominent title ===
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function PinLayoutMinimal({
-  title,
-  heroImageUrl,
-  logoDataUri,
-}: {
-  title: string;
-  heroImageUrl: string;
-  logoDataUri: string;
-}): any {
-  const W = 1000;
-  const H = 1500;
-  const ACCENT_W = 12;
-  const IMG_SIZE = 400;
-  const titleSize = title.length > 40 ? 48 : title.length > 25 ? 56 : 64;
-
-  return {
-    type: "div",
-    props: {
-      style: {
-        width: `${W}px`,
-        height: `${H}px`,
-        display: "flex",
-        backgroundColor: BRAND.cream,
-        position: "relative",
-      },
-      children: [
-        // Left accent bar
-        {
-          type: "div",
-          props: {
-            style: {
-              position: "absolute",
-              top: "60px",
-              left: "40px",
-              width: `${ACCENT_W}px`,
-              height: `${H - 120}px`,
-              backgroundColor: BRAND.primary,
-              borderRadius: "6px",
-            },
-          },
-        },
-        // Content area
-        {
-          type: "div",
-          props: {
-            style: {
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              alignItems: "center",
-              width: `${W}px`,
-              height: `${H}px`,
-              padding: "0 80px",
-              gap: "40px",
-            },
-            children: [
-              // Rounded image
-              {
-                type: "div",
-                props: {
-                  style: {
-                    width: `${IMG_SIZE}px`,
-                    height: `${IMG_SIZE}px`,
-                    borderRadius: "50%",
-                    overflow: "hidden",
-                    border: `4px solid ${BRAND.primary}22`,
-                    display: "flex",
-                  },
-                  children: {
-                    type: "img",
-                    props: {
-                      src: heroImageUrl,
-                      style: {
-                        width: `${IMG_SIZE}px`,
-                        height: `${IMG_SIZE}px`,
-                        objectFit: "cover",
-                      },
-                    },
-                  },
-                },
-              },
-              // Title
-              {
-                type: "div",
-                props: {
-                  style: {
-                    fontFamily: "Playfair Display",
-                    color: BRAND.foreground,
-                    fontSize: `${titleSize}px`,
-                    fontWeight: 700,
-                    lineHeight: 1.15,
-                    textAlign: "center",
-                    maxWidth: "780px",
-                  },
-                  children: title,
-                },
-              },
-              // Decorative divider
-              {
-                type: "div",
-                props: {
-                  style: {
-                    width: "80px",
-                    height: "3px",
-                    backgroundColor: BRAND.primary,
-                    borderRadius: "2px",
-                  },
-                },
-              },
-              // Branding
-              {
-                type: "div",
-                props: {
-                  style: {
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  },
-                  children: [
-                    ...(logoDataUri
-                      ? [
-                          {
-                            type: "img",
-                            props: {
-                              src: logoDataUri,
-                              style: { height: "24px" },
-                            },
-                          },
-                        ]
-                      : []),
-                    {
-                      type: "div",
-                      props: {
-                        style: {
-                          fontFamily: "DM Sans",
-                          color: BRAND.primary,
-                          fontSize: "16px",
-                          fontWeight: 600,
-                          letterSpacing: "1px",
-                        },
-                        children: "cookwithyara.com",
-                      },
-                    },
-                  ],
-                },
-              },
-            ],
-          },
-        },
-      ],
-    },
-  };
-}
-
-// === Public API ===
+// === Render ===
 
 async function renderPin(element: unknown): Promise<Buffer> {
-  const [dmSansData, playfairData] = await Promise.all([
-    getDmSans(),
-    getPlayfair(),
-  ]);
+  const [bowlbyFont, antonFont, interBold, playfairBold, playfairIt] =
+    await Promise.all([
+      getBowlby(),
+      getAnton(),
+      getInter700(),
+      getPlayfair700(),
+      getPlayfairItalic(),
+    ]);
 
   const svg = await satori(element as React.ReactNode, {
-    width: 1000,
-    height: 1500,
+    width: W,
+    height: H,
     fonts: [
-      {
-        name: "DM Sans",
-        data: dmSansData,
-        weight: 600,
-        style: "normal",
-      },
-      {
-        name: "Playfair Display",
-        data: playfairData,
-        weight: 700,
-        style: "normal",
-      },
+      { name: "Bowlby One", data: bowlbyFont, weight: 700, style: "normal" },
+      { name: "Anton", data: antonFont, weight: 700, style: "normal" },
+      { name: "Inter", data: interBold, weight: 700, style: "normal" },
+      { name: "Playfair Display", data: playfairBold, weight: 700, style: "normal" },
+      { name: "Playfair Display Italic", data: playfairIt, weight: 500, style: "italic" },
     ],
   });
 
   return Buffer.from(await sharp(Buffer.from(svg)).png().toBuffer());
 }
 
-/** Design 1: Dual image with title band */
-export async function generatePinImage(
-  params: PinImageParams,
-): Promise<Buffer> {
-  const logoDataUri = await getLogoDataUri();
-  const element = PinLayout({
-    title: params.title,
-    heroImageUrl: params.heroImageUrl,
-    logoDataUri,
-  });
-  return renderPin(element);
+// === Public API ===
+
+/** Design 1: Stacked — photo / title / photo / url (the reference layout) */
+export async function generatePinImage(params: PinImageParams): Promise<Buffer> {
+  return renderPin(StackedPin(params));
 }
 
-/** Design 2: Full-bleed image with logo only */
+/** Design 2: Inverted — smaller top photo, bigger bottom photo */
 export async function generatePinImageSimple(
   params: PinImageParams,
 ): Promise<Buffer> {
-  const logoDataUri = await getLogoDataUri();
-  const element = PinLayoutSimple({
-    heroImageUrl: params.heroImageUrl,
-    logoDataUri,
-  });
-  return renderPin(element);
+  return renderPin(InvertedStackedPin(params));
 }
 
-/** Design 3: Bold Overlay — full-bleed image with dark gradient and large white title */
+/** Design 3: Title-top — title band first, then two photos */
 export async function generatePinImageBoldOverlay(
   params: PinImageParams,
 ): Promise<Buffer> {
-  const logoDataUri = await getLogoDataUri();
-  const element = PinLayoutBoldOverlay({
-    title: params.title,
-    heroImageUrl: params.heroImageUrl,
-    logoDataUri,
-  });
-  return renderPin(element);
+  return renderPin(TitleTopPin(params));
 }
 
-/** Design 4: Card Style — white card with shadow, image top, title bottom */
+/** Design 4: Cream band — cream-toned title band, otherwise identical */
 export async function generatePinImageCard(
   params: PinImageParams,
 ): Promise<Buffer> {
-  const logoDataUri = await getLogoDataUri();
-  const element = PinLayoutCard({
-    title: params.title,
-    heroImageUrl: params.heroImageUrl,
-    logoDataUri,
-  });
-  return renderPin(element);
+  return renderPin(CreamBandPin(params));
 }
 
-/** Design 5: Minimal — accent bar, circular image, prominent title */
+/** Design 5: Forest — brand green title text + URL bar */
 export async function generatePinImageMinimal(
   params: PinImageParams,
 ): Promise<Buffer> {
-  const logoDataUri = await getLogoDataUri();
-  const element = PinLayoutMinimal({
-    title: params.title,
-    heroImageUrl: params.heroImageUrl,
-    logoDataUri,
-  });
-  return renderPin(element);
+  return renderPin(ForestPin(params));
 }
 
-/** Dispatcher — routes to the correct design template by number */
+/** Design 6: Editorial — luxury food-blog layout (45/30/25 with cream band + serif title) */
+export async function generatePinImageEditorial(
+  params: PinImageParams,
+): Promise<Buffer> {
+  return renderPin(EditorialPin(params));
+}
+
+/** Design 7: Full-bleed hero — photo fills canvas, gradient + minimal text in lower third */
+export async function generatePinImageFullBleed(
+  params: PinImageParams,
+): Promise<Buffer> {
+  return renderPin(FullBleedHeroPin(params));
+}
+
+/** Dispatcher */
 export async function generatePinDesign(
   designNum: number,
   params: PinImageParams,
@@ -1072,6 +728,10 @@ export async function generatePinDesign(
       return generatePinImageCard(params);
     case 5:
       return generatePinImageMinimal(params);
+    case 6:
+      return generatePinImageEditorial(params);
+    case 7:
+      return generatePinImageFullBleed(params);
     default:
       return generatePinImage(params);
   }
