@@ -95,9 +95,10 @@ async function callAnthropic(
 }
 
 /**
- * Try Gemini first; on any failure (rate limit, quota, outage) transparently
- * fall back to the equivalent Claude model. If no ANTHROPIC_API_KEY is set,
- * the original Gemini error propagates unchanged.
+ * Try Gemini first; on any failure (rate limit, quota, outage) retry once
+ * after a short backoff, then try the other Gemini tier, and only as a last
+ * resort fall back to the equivalent Claude model. If no ANTHROPIC_API_KEY is
+ * set, the last Gemini error propagates unchanged.
  */
 async function callAI(
   model: string,
@@ -105,18 +106,27 @@ async function callAI(
   userMessage: string,
   opts: { thinking?: boolean; maxOutputTokens?: number } = {},
 ): Promise<string> {
-  try {
-    return await callGemini(model, systemInstruction, userMessage, opts);
-  } catch (err) {
-    if (!process.env.ANTHROPIC_API_KEY) throw err;
-    console.warn(
-      `[ai-writer] Gemini (${model}) failed — falling back to Anthropic:`,
-      err instanceof Error ? err.message : err,
-    );
-    const claudeModel = model === MODEL_QUALITY ? CLAUDE_QUALITY : CLAUDE_FAST;
-    const maxTokens = Math.min(opts.maxOutputTokens ?? 8192, 16384);
-    return callAnthropic(claudeModel, systemInstruction, userMessage, maxTokens);
+  const altModel = model === MODEL_QUALITY ? MODEL_FAST : MODEL_QUALITY;
+  let lastErr: unknown;
+
+  for (const [attempt, geminiModel] of [model, model, altModel].entries()) {
+    try {
+      if (attempt === 1) await new Promise((r) => setTimeout(r, 2000));
+      return await callGemini(geminiModel, systemInstruction, userMessage, opts);
+    } catch (err) {
+      lastErr = err;
+      console.warn(
+        `[ai-writer] Gemini (${geminiModel}) attempt ${attempt + 1} failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
+
+  if (!process.env.ANTHROPIC_API_KEY) throw lastErr;
+  console.warn(`[ai-writer] All Gemini attempts failed — falling back to Anthropic`);
+  const claudeModel = model === MODEL_QUALITY ? CLAUDE_QUALITY : CLAUDE_FAST;
+  const maxTokens = Math.min(opts.maxOutputTokens ?? 8192, 16384);
+  return callAnthropic(claudeModel, systemInstruction, userMessage, maxTokens);
 }
 
 // === Public API ===
