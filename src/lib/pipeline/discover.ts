@@ -103,6 +103,9 @@ export async function discoverKeywords(): Promise<{ processed: number }> {
   let newCount = 0;
 
   for (const { trend, trendType, score } of ranked) {
+    // Skip keywords that slug to "" — they break Blob paths downstream
+    if (!generateSlug(trend.keyword)) continue;
+
     // Skip duplicates we've already written about
     if (await isDuplicate(trend.keyword)) continue;
 

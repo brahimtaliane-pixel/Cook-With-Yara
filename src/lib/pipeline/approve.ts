@@ -46,6 +46,19 @@ export async function approveKeywords(): Promise<{ processed: number }> {
     try {
       // Check for slug collision before calling Claude
       const slug = generateSlug(kw.keyword);
+      if (!slug) {
+        // Symbol-only/empty keywords slug to "" and break Blob paths downstream
+        await db
+          .update(keywords)
+          .set({
+            status: KeywordStatus.REJECTED,
+            failureReason: "Keyword produces an empty slug",
+            updatedAt: new Date(),
+          })
+          .where(eq(keywords.id, kw.id));
+        processed++;
+        continue;
+      }
       const [existingArticle] = await db
         .select({ id: articles.id })
         .from(articles)

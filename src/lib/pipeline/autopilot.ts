@@ -132,7 +132,10 @@ export async function runAutopilot(
     .filter(({ pin }) => {
       const lower = pin.title.toLowerCase();
       return !FOOD_BLOCKLIST.some((blocked) => lower.includes(blocked));
-    });
+    })
+    // Scraped pins occasionally have empty/symbol-only titles, which slug to
+    // "" and produce articles that break downstream (Blob paths contain "//")
+    .filter(({ pin }) => generateSlug(normalizePinTitle(pin.title)).length > 0);
 
   if (scoredPins.length === 0) {
     console.log("[autopilot] No pins passed score/filter threshold");
@@ -228,6 +231,17 @@ export async function runAutopilot(
 
     // 9. Create keyword + article
     const slug = generateSlug(normalizePinTitle(pin.title));
+    if (!slug) {
+      await db.insert(autopilotDecisions).values({
+        runId,
+        intelPinId: pin.id,
+        pinTitle: pin.title,
+        pinScore: score,
+        decision: "skipped_invalid",
+        reason: "Pin title produces an empty slug",
+      });
+      continue;
+    }
 
     const [newKeyword] = await db
       .insert(keywords)
