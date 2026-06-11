@@ -122,6 +122,25 @@ export const FOOD_INDICATORS = [
   // Speed/ease
   "easy", "quick", "one pot", "sheet pan", "no bake", "5 ingredient",
   "30 minute", "weeknight", "meal prep",
+  // Produce & common ingredients
+  "potato", "sweet potato", "zucchini", "cauliflower", "broccoli",
+  "mushroom", "spinach", "eggplant", "avocado", "pumpkin", "butternut",
+  "corn", "tomato", "cucumber", "carrot", "banana", "apple", "lemon",
+  "lime", "orange", "strawberry", "blueberry", "raspberry", "peach",
+  "mango", "cherry", "rhubarb", "date", "fig", "pistachio", "almond",
+  "walnut", "pecan", "coconut", "tahini", "feta", "halloumi", "yogurt",
+  "cheese", "egg", "honey", "maple", "cinnamon", "vanilla", "chocolate",
+  "caramel", "peanut butter", "matcha", "pesto", "garlic",
+  // More dish types & treats
+  "cobbler", "crumble", "galette", "tart", "flatbread", "pita",
+  "focaccia", "bagel", "cinnamon roll", "donut", "fudge", "ice cream",
+  "sorbet", "popsicle", "milkshake", "lemonade", "granola",
+  "overnight oats", "energy balls", "couscous", "quinoa", "orzo",
+  "meatball", "skewer", "fritter", "patties", "nuggets", "tenders",
+  "mac and cheese", "pot pie", "shepherds pie", "enchilada",
+  "quesadilla", "fajita", "gyro", "wings", "sliders", "bruschetta",
+  "crostini", "banana bread", "zucchini bread", "pound cake",
+  "cheesecake", "cupcake", "macaron", "truffle", "bark", "brittle",
 ] as const;
 
 // Keywords that should never pass through (non-halal)

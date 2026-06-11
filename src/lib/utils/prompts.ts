@@ -638,7 +638,7 @@ Ask yourself: "Can I write ONE specific recipe article for this keyword with a c
 - If YES → approve
 - If it would need to be a roundup, listicle, or category page → reject`;
 
-export const AUTOPILOT_EVALUATION_PROMPT = `You are a recipe content strategist for cookwithyara.com, a halal Mediterranean and Levantine food blog. Your job is to evaluate whether a trending Pinterest pin should be turned into a full recipe article.
+export const AUTOPILOT_EVALUATION_PROMPT = `You are a recipe content strategist for cookwithyara.com, a halal-friendly family recipe blog. The site covers everyday comfort food, baking, desserts, seasonal produce, and global dishes — any cuisine is welcome as long as every recipe is 100% halal. Your job is to evaluate whether a trending Pinterest pin should be turned into a full recipe article.
 
 Return a JSON object:
 {
@@ -650,23 +650,27 @@ Return a JSON object:
 1. It's a SPECIFIC recipe (not a roundup, category, or generic food topic)
 2. It's halal-compliant (no pork, bacon, ham, alcohol, wine, beer, or any haram ingredients)
 3. It has real search potential (someone would Google this as a recipe query)
-4. It's NOT too similar to articles we've already written (check the recent articles list)
+4. It's not essentially the SAME dish as an existing article (check the recent articles list)
 5. It can be turned into a standalone recipe with ingredients + instructions
+
+## What counts as "the same dish" (criterion 4):
+- REJECT only when it's the same dish prepared the same way (e.g. we have "Easy Rhubarb Cream Cheese Bars" and the pin is "Delicious Rhubarb Cream Cheese Bars")
+- APPROVE when the dish format, cooking method, or flavor profile is meaningfully different, even if it shares a main ingredient (a rhubarb jam, a rhubarb cake, and a rhubarb chutney are three different articles)
+- STRONGLY PREFER recipes whose main ingredient or category is under-represented in the recent articles list — variety grows the site
 
 ## REJECT if ANY of these are true:
 - It's a broad category ("dinner ideas", "healthy meals") not a specific recipe
 - It contains non-halal ingredients (pork, bacon, ham, prosciutto, wine, beer, cocktails)
 - It's a brand-specific product ("Trader Joe's X", "Costco Y")
-- It's too similar to an article we already have (same dish, minor variation)
 - It's not food/recipe related
 - It's a food trend or lifestyle topic, not a cookable recipe
 
 ## Score signal:
 - Score 85+: Strong trend signal, lean toward approval if criteria are met
-- Score 65-84: Moderate signal, apply criteria strictly
-- Score below 65: Should not reach you, but reject if it does
+- Score 65-84: Moderate signal, approve if it's a distinct, cookable, halal recipe
+- Score below 65: Weaker signal — approve only if it clearly adds variety to the site
 
-Be decisive. When in doubt, reject — we prefer quality over quantity.`;
+Be decisive. Be absolutely strict on halal compliance — when in doubt about ingredients, reject. For everything else, lean toward approval: a distinct, cookable recipe that adds variety is worth publishing.`;
 
 export function buildAutopilotPrompt(context: {
   pinTitle: string;
