@@ -1,5 +1,4 @@
 import { GoogleGenAI } from "@google/genai";
-import Anthropic from "@anthropic-ai/sdk";
 import { buildContentPrompt, buildApprovalPrompt, buildAutopilotPrompt } from "@/lib/utils/prompts";
 
 // === Types ===
@@ -24,18 +23,35 @@ export interface AutopilotEvaluation {
 
 // === Client ===
 
-function getClient(): GoogleGenAI {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+/**
+ * Collect every configured Gemini API key. Supports a comma-separated list in
+ * GEMINI_API_KEY and/or numbered GEMINI_API_KEY_2, GEMINI_API_KEY_3, … vars so
+ * we can rotate to another key when one is rate-limited or out of quota.
+ */
+function getApiKeys(): string[] {
+  const keys: string[] = [];
+  const primary = process.env.GEMINI_API_KEY ?? "";
+  for (const k of primary.split(",")) {
+    const trimmed = k.trim();
+    if (trimmed) keys.push(trimmed);
+  }
+  for (let i = 2; i <= 10; i++) {
+    const k = (process.env[`GEMINI_API_KEY_${i}`] ?? "").trim();
+    if (k) keys.push(k);
+  }
+  // De-duplicate while preserving order.
+  const seen = new Set<string>();
+  const unique = keys.filter((k) => (seen.has(k) ? false : (seen.add(k), true)));
+  if (unique.length === 0) throw new Error("GEMINI_API_KEY is not set");
+  return unique;
+}
+
+function getClient(apiKey: string): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
 }
 
 const MODEL_FAST = "gemini-2.5-flash";   // approval / evaluation
 const MODEL_QUALITY = "gemini-2.5-pro";  // long-form content
-
-// Anthropic fallbacks, used only when the Gemini call throws.
-const CLAUDE_QUALITY = "claude-sonnet-4-5-20250929"; // long-form content
-const CLAUDE_FAST = "claude-haiku-4-5-20251001";     // approval / evaluation
 
 function stripFences(text: string): string {
   let out = text.trim();
@@ -46,12 +62,13 @@ function stripFences(text: string): string {
 }
 
 async function callGemini(
+  apiKey: string,
   model: string,
   systemInstruction: string,
   userMessage: string,
   opts: { thinking?: boolean; maxOutputTokens?: number } = {},
 ): Promise<string> {
-  const ai = getClient();
+  const ai = getClient(apiKey);
   const response = await ai.models.generateContent({
     model,
     contents: userMessage,
@@ -71,34 +88,12 @@ async function callGemini(
   return stripFences(text);
 }
 
-async function callAnthropic(
-  model: string,
-  systemInstruction: string,
-  userMessage: string,
-  maxTokens: number,
-): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not set");
-  const client = new Anthropic({ apiKey });
-  const response = await client.messages.create({
-    model,
-    max_tokens: maxTokens,
-    system: `${systemInstruction} Return only valid JSON, no markdown fences.`,
-    messages: [{ role: "user", content: userMessage }],
-  });
-
-  const block = response.content.find((b) => b.type === "text");
-  const text = block && block.type === "text" ? block.text : "";
-  if (!text) throw new Error("Empty response from Anthropic");
-
-  return stripFences(text);
-}
-
 /**
- * Try Gemini first; on any failure (rate limit, quota, outage) retry once
- * after a short backoff, then try the other Gemini tier, and only as a last
- * resort fall back to the equivalent Claude model. If no ANTHROPIC_API_KEY is
- * set, the last Gemini error propagates unchanged.
+ * Try the requested Gemini model on each configured API key in turn; on any
+ * failure (rate limit, quota, outage) retry once after a short backoff, then
+ * try the other Gemini tier on that same key, before rotating to the next key.
+ * With multiple keys configured this rides out per-key quota exhaustion.
+ * The last error propagates if every key/model combination fails.
  */
 async function callAI(
   model: string,
@@ -107,26 +102,25 @@ async function callAI(
   opts: { thinking?: boolean; maxOutputTokens?: number } = {},
 ): Promise<string> {
   const altModel = model === MODEL_QUALITY ? MODEL_FAST : MODEL_QUALITY;
+  const keys = getApiKeys();
   let lastErr: unknown;
 
-  for (const [attempt, geminiModel] of [model, model, altModel].entries()) {
-    try {
-      if (attempt === 1) await new Promise((r) => setTimeout(r, 2000));
-      return await callGemini(geminiModel, systemInstruction, userMessage, opts);
-    } catch (err) {
-      lastErr = err;
-      console.warn(
-        `[ai-writer] Gemini (${geminiModel}) attempt ${attempt + 1} failed:`,
-        err instanceof Error ? err.message : err,
-      );
+  for (const [keyIndex, apiKey] of keys.entries()) {
+    for (const [attempt, geminiModel] of [model, model, altModel].entries()) {
+      try {
+        if (attempt === 1) await new Promise((r) => setTimeout(r, 2000));
+        return await callGemini(apiKey, geminiModel, systemInstruction, userMessage, opts);
+      } catch (err) {
+        lastErr = err;
+        console.warn(
+          `[ai-writer] Gemini key #${keyIndex + 1} (${geminiModel}) attempt ${attempt + 1} failed:`,
+          err instanceof Error ? err.message : err,
+        );
+      }
     }
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) throw lastErr;
-  console.warn(`[ai-writer] All Gemini attempts failed — falling back to Anthropic`);
-  const claudeModel = model === MODEL_QUALITY ? CLAUDE_QUALITY : CLAUDE_FAST;
-  const maxTokens = Math.min(opts.maxOutputTokens ?? 8192, 16384);
-  return callAnthropic(claudeModel, systemInstruction, userMessage, maxTokens);
+  throw lastErr;
 }
 
 // === Public API ===
