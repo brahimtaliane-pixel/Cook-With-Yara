@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { getGeminiApiKeys } from "@/lib/services/gemini-keys";
 import { buildContentPrompt, buildApprovalPrompt, buildAutopilotPrompt } from "@/lib/utils/prompts";
 
 // === Types ===
@@ -22,29 +23,6 @@ export interface AutopilotEvaluation {
 }
 
 // === Client ===
-
-/**
- * Collect every configured Gemini API key. Supports a comma-separated list in
- * GEMINI_API_KEY and/or numbered GEMINI_API_KEY_2, GEMINI_API_KEY_3, … vars so
- * we can rotate to another key when one is rate-limited or out of quota.
- */
-function getApiKeys(): string[] {
-  const keys: string[] = [];
-  const primary = process.env.GEMINI_API_KEY ?? "";
-  for (const k of primary.split(",")) {
-    const trimmed = k.trim();
-    if (trimmed) keys.push(trimmed);
-  }
-  for (let i = 2; i <= 10; i++) {
-    const k = (process.env[`GEMINI_API_KEY_${i}`] ?? "").trim();
-    if (k) keys.push(k);
-  }
-  // De-duplicate while preserving order.
-  const seen = new Set<string>();
-  const unique = keys.filter((k) => (seen.has(k) ? false : (seen.add(k), true)));
-  if (unique.length === 0) throw new Error("GEMINI_API_KEY is not set");
-  return unique;
-}
 
 function getClient(apiKey: string): GoogleGenAI {
   return new GoogleGenAI({ apiKey });
@@ -102,7 +80,7 @@ async function callAI(
   opts: { thinking?: boolean; maxOutputTokens?: number } = {},
 ): Promise<string> {
   const altModel = model === MODEL_QUALITY ? MODEL_FAST : MODEL_QUALITY;
-  const keys = getApiKeys();
+  const keys = getGeminiApiKeys();
   let lastErr: unknown;
 
   for (const [keyIndex, apiKey] of keys.entries()) {
