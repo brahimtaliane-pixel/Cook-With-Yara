@@ -12,13 +12,13 @@ const categoryLinks = [
 
 const exploreLinks = [
   { href: "/recipes", label: "All Recipes" },
-  { href: "#about", label: "About Yara" },
-  { href: "#newsletter", label: "Newsletter" },
+  { href: "/about", label: "About Yara" },
+  { href: "/contact", label: "Contact" },
 ];
 
 const legalLinks = [
   { href: "/privacy-policy", label: "Privacy Policy" },
-  { href: "/terms-of-service", label: "Terms of Service" },
+  { href: "/terms", label: "Terms of Service" },
 ];
 
 export function Footer() {
