@@ -204,9 +204,15 @@ async function pinterestFetch<T>(
 export async function fetchTrendingKeywords(
   region: string,
   trendType: "growing" | "monthly" | "yearly",
+  // Scope trends to Pinterest's "Food and drinks" interest (the same filter as
+  // trends.pinterest.com?topicInterestIds=918530398158). Without it the v5
+  // endpoint returns general US trends (e.g. "nails", celebrity names) that the
+  // downstream food filter rejects, so discovery produced ~0 keywords.
+  interests: string = "food_and_drinks",
 ): Promise<PinterestTrendKeyword[]> {
+  const params = new URLSearchParams({ interests, limit: "50" });
   const data = await pinterestFetch<PinterestTrendsResponse>(
-    `/trends/keywords/${encodeURIComponent(region)}/top/${encodeURIComponent(trendType)}`,
+    `/trends/keywords/${encodeURIComponent(region)}/top/${encodeURIComponent(trendType)}?${params.toString()}`,
   );
   return data.trends;
 }
