@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { intelCompetitors, intelPins, intelPinSnapshots } from "@/lib/db/schema";
-import { eq, desc, avg, lt, inArray, isNull } from "drizzle-orm";
+import { eq, avg, lt, isNull, sql } from "drizzle-orm";
 import {
   scrapeCompetitorProfileViaApify,
   searchPinterestNative,
@@ -104,123 +104,70 @@ async function createSnapshots(competitorId: string): Promise<void> {
   }
 }
 
-async function computeInstantMetrics(competitorId: string): Promise<void> {
-  const pins = await db
-    .select({
-      id: intelPins.id,
-      pinId: intelPins.pinId,
-      saves: intelPins.saves,
-      velocity: intelPins.velocity,
-    })
-    .from(intelPins)
-    .where(eq(intelPins.competitorId, competitorId));
+/**
+ * Compute instantVelocity + acceleration from each pin's two/three most recent
+ * snapshots. Runs entirely in SQL (window function + self-join) so it never
+ * loads the (multi-million-row) snapshot table into memory — the previous
+ * in-memory version timed out the whole cron, so metrics never persisted.
+ *
+ * `scope` selects which pins to update: a competitor's pins, or the trending
+ * pins (competitor_id IS NULL).
+ */
+async function computeSnapshotMetrics(
+  scope: { competitorId: string } | { trending: true }
+): Promise<void> {
+  const scopeFilter =
+    "competitorId" in scope
+      ? sql`p.competitor_id = ${scope.competitorId}`
+      : sql`p.competitor_id IS NULL`;
 
-  if (pins.length === 0) return;
-
-  // Fetch all snapshots for these pins in one query, ordered by recency
-  const pinIds = pins.map((p) => p.pinId);
-  const allSnapshots = await db
-    .select()
-    .from(intelPinSnapshots)
-    .where(inArray(intelPinSnapshots.pinId, pinIds))
-    .orderBy(desc(intelPinSnapshots.snapshotAt));
-
-  // Group snapshots by pinId (already sorted desc by snapshotAt)
-  const snapshotsByPin = new Map<string, typeof allSnapshots>();
-  for (const snap of allSnapshots) {
-    const existing = snapshotsByPin.get(snap.pinId);
-    if (existing) {
-      existing.push(snap);
-    } else {
-      snapshotsByPin.set(snap.pinId, [snap]);
-    }
-  }
-
-  // Compute metrics in memory
-  const now = new Date();
-  type UpdateEntry = {
-    id: string;
-    instantVelocity: number;
-    acceleration: number;
-    trendDirection: string;
-    previousSaves: number;
-    previousSnapshotAt: Date;
-  };
-  const updates: UpdateEntry[] = [];
-
-  for (const pin of pins) {
-    const snapshots = snapshotsByPin.get(pin.pinId) ?? [];
-
-    if (snapshots.length < 2) {
-      updates.push({
-        id: pin.id,
-        instantVelocity: pin.velocity,
-        acceleration: 0,
-        trendDirection: "new",
-        previousSaves: pin.saves,
-        previousSnapshotAt: now,
-      });
-      continue;
-    }
-
-    // Use the two most recent snapshots for instantVelocity
-    const [latest, previous] = snapshots;
-    const daysBetweenLatest = Math.max(
-      0.1,
-      (latest.snapshotAt.getTime() - previous.snapshotAt.getTime()) / 86_400_000
-    );
-    const instantVelocity = Math.max(
-      0,
-      Math.round((latest.saves - previous.saves) / daysBetweenLatest)
-    );
-
-    // For acceleration, need a third snapshot to compare velocity intervals
-    let acceleration = 0;
-    if (snapshots.length >= 3) {
-      const third = snapshots[2];
-      const daysBetweenPrev = Math.max(
-        0.1,
-        (previous.snapshotAt.getTime() - third.snapshotAt.getTime()) / 86_400_000
-      );
-      const prevVelocity = Math.max(
-        0,
-        Math.round((previous.saves - third.saves) / daysBetweenPrev)
-      );
-      acceleration = instantVelocity - prevVelocity;
-    }
-
-    let trendDirection = "stable";
-    if (acceleration > 5) trendDirection = "rising";
-    else if (acceleration < -5) trendDirection = "falling";
-
-    updates.push({
-      id: pin.id,
-      instantVelocity,
-      acceleration,
-      trendDirection,
-      previousSaves: previous.saves,
-      previousSnapshotAt: previous.snapshotAt,
-    });
-  }
-
-  // Batch updates in groups of 50
-  for (let i = 0; i < updates.length; i += 50) {
-    const batch = updates.slice(i, i + 50);
-    await Promise.all(
-      batch.map((u) =>
-        db
-          .update(intelPins)
-          .set({
-            instantVelocity: u.instantVelocity,
-            acceleration: u.acceleration,
-            trendDirection: u.trendDirection,
-            previousSaves: u.previousSaves,
-            previousSnapshotAt: u.previousSnapshotAt,
-          })
-          .where(eq(intelPins.id, u.id))
-      )
-    );
-  }
+  await db.execute(sql`
+    WITH ranked AS (
+      SELECT s.pin_id, s.saves, s.snapshot_at,
+             row_number() OVER (PARTITION BY s.pin_id ORDER BY s.snapshot_at DESC) AS rn
+      FROM intel_pin_snapshots s
+      JOIN intel_pins p ON p.pin_id = s.pin_id
+      -- Snapshots are taken every refresh (hourly), so the 3 most recent per
+      -- pin are always within hours; bounding the scan to the last 2 days keeps
+      -- this off the full multi-million-row history.
+      WHERE ${scopeFilter} AND s.snapshot_at >= now() - interval '2 days'
+    ),
+    calc AS (
+      SELECT l.pin_id,
+             GREATEST(0, round(
+               (l.saves - pr.saves) /
+               GREATEST(0.1, EXTRACT(EPOCH FROM (l.snapshot_at - pr.snapshot_at)) / 86400.0)
+             ))::int AS iv,
+             pr.saves AS prev_saves,
+             pr.snapshot_at AS prev_at,
+             t.saves AS third_saves,
+             t.snapshot_at AS third_at
+      FROM (SELECT pin_id, saves, snapshot_at FROM ranked WHERE rn = 1) l
+      JOIN (SELECT pin_id, saves, snapshot_at FROM ranked WHERE rn = 2) pr USING (pin_id)
+      LEFT JOIN (SELECT pin_id, saves, snapshot_at FROM ranked WHERE rn = 3) t USING (pin_id)
+    ),
+    calc2 AS (
+      SELECT pin_id, iv, prev_saves, prev_at,
+             CASE WHEN third_at IS NOT NULL THEN
+               iv - GREATEST(0, round(
+                 (prev_saves - third_saves) /
+                 GREATEST(0.1, EXTRACT(EPOCH FROM (prev_at - third_at)) / 86400.0)
+               ))::int
+             ELSE 0 END AS accel
+      FROM calc
+    )
+    UPDATE intel_pins ip
+    SET instant_velocity = c.iv,
+        acceleration = c.accel,
+        trend_direction = CASE WHEN c.accel > 5 THEN 'rising'
+                               WHEN c.accel < -5 THEN 'falling'
+                               ELSE 'stable' END,
+        previous_saves = c.prev_saves,
+        previous_snapshot_at = c.prev_at,
+        updated_at = now()
+    FROM calc2 c
+    WHERE ip.pin_id = c.pin_id
+  `);
 }
 
 async function computeCreatorBaselines(competitorId: string): Promise<void> {
@@ -286,119 +233,6 @@ async function createTrendingSnapshots(): Promise<void> {
         velocity: p.velocity,
         snapshotAt: now,
       }))
-    );
-  }
-}
-
-async function computeTrendingInstantMetrics(): Promise<void> {
-  const pins = await db
-    .select({
-      id: intelPins.id,
-      pinId: intelPins.pinId,
-      saves: intelPins.saves,
-      velocity: intelPins.velocity,
-    })
-    .from(intelPins)
-    .where(isNull(intelPins.competitorId));
-
-  if (pins.length === 0) return;
-
-  const pinIds = pins.map((p) => p.pinId);
-  const allSnapshots = await db
-    .select()
-    .from(intelPinSnapshots)
-    .where(inArray(intelPinSnapshots.pinId, pinIds))
-    .orderBy(desc(intelPinSnapshots.snapshotAt));
-
-  const snapshotsByPin = new Map<string, typeof allSnapshots>();
-  for (const snap of allSnapshots) {
-    const existing = snapshotsByPin.get(snap.pinId);
-    if (existing) {
-      existing.push(snap);
-    } else {
-      snapshotsByPin.set(snap.pinId, [snap]);
-    }
-  }
-
-  const now = new Date();
-  type UpdateEntry = {
-    id: string;
-    instantVelocity: number;
-    acceleration: number;
-    trendDirection: string;
-    previousSaves: number;
-    previousSnapshotAt: Date;
-  };
-  const updates: UpdateEntry[] = [];
-
-  for (const pin of pins) {
-    const snapshots = snapshotsByPin.get(pin.pinId) ?? [];
-
-    if (snapshots.length < 2) {
-      updates.push({
-        id: pin.id,
-        instantVelocity: pin.velocity,
-        acceleration: 0,
-        trendDirection: "new",
-        previousSaves: pin.saves,
-        previousSnapshotAt: now,
-      });
-      continue;
-    }
-
-    const [latest, previous] = snapshots;
-    const daysBetweenLatest = Math.max(
-      0.1,
-      (latest.snapshotAt.getTime() - previous.snapshotAt.getTime()) / 86_400_000
-    );
-    const instantVelocity = Math.max(
-      0,
-      Math.round((latest.saves - previous.saves) / daysBetweenLatest)
-    );
-
-    let acceleration = 0;
-    if (snapshots.length >= 3) {
-      const third = snapshots[2];
-      const daysBetweenPrev = Math.max(
-        0.1,
-        (previous.snapshotAt.getTime() - third.snapshotAt.getTime()) / 86_400_000
-      );
-      const prevVelocity = Math.max(
-        0,
-        Math.round((previous.saves - third.saves) / daysBetweenPrev)
-      );
-      acceleration = instantVelocity - prevVelocity;
-    }
-
-    let trendDirection = "stable";
-    if (acceleration > 5) trendDirection = "rising";
-    else if (acceleration < -5) trendDirection = "falling";
-
-    updates.push({
-      id: pin.id,
-      instantVelocity,
-      acceleration,
-      trendDirection,
-      previousSaves: previous.saves,
-      previousSnapshotAt: previous.snapshotAt,
-    });
-  }
-
-  for (let i = 0; i < updates.length; i += 50) {
-    const batch = updates.slice(i, i + 50);
-    await Promise.all(
-      batch.map((u) =>
-        db
-          .update(intelPins)
-          .set({
-            instantVelocity: u.instantVelocity,
-            acceleration: u.acceleration,
-            trendDirection: u.trendDirection,
-            previousSaves: u.previousSaves,
-            previousSnapshotAt: u.previousSnapshotAt,
-          })
-          .where(eq(intelPins.id, u.id))
-      )
     );
   }
 }
@@ -508,7 +342,7 @@ export async function refreshSingleCompetitor(competitorId: string): Promise<num
   );
 
   // 4. Compute instant metrics from snapshots
-  await computeInstantMetrics(competitorId);
+  await computeSnapshotMetrics({ competitorId });
 
   // 5. Compute creator baselines
   await computeCreatorBaselines(competitorId);
@@ -659,7 +493,7 @@ export async function refreshTrendingPins(): Promise<{ processed: number }> {
   }
 
   // 4. Compute instant metrics for trending pins after all upserts
-  await computeTrendingInstantMetrics();
+  await computeSnapshotMetrics({ trending: true });
 
   return { processed: totalProcessed };
 }

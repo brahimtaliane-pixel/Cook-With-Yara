@@ -70,49 +70,60 @@ export function computePinScore(pin: PinScoreInput): PinScoreResult {
         : 0;
   }
 
-  // --- Engagement (20%): total saves on log scale ---
-  // This is the proof that a pin is actually resonating.
-  const engagementNorm = Math.min(1, Math.log10(pin.saves + 1) / 4);
+  // --- Engagement (saves on log scale) — the one always-reliable signal ---
+  // This is the proof that a pin is actually resonating. Divisor 6 spreads
+  // the curve up to ~1M saves so genuinely viral pins stay distinguishable
+  // (with /4 everything above 10k saves saturated at the same value).
+  const engagementNorm = Math.min(1, Math.log10(pin.saves + 1) / 6);
 
-  // --- Freshness (15%): exponential decay, 7-day half-life ---
-  // Freshness is a BONUS for recent pins, not a standalone score.
-  // It's gated by engagement — a fresh pin with 0 saves gets nothing.
+  // --- Freshness: exponential decay, 7-day half-life ---
   const daysOld = getDaysOld(pin.pinCreatedAt);
   const freshnessNorm = Math.exp(-0.693 * daysOld / 7);
 
-  // --- Baseline Multiple (10%): outperforming creator's average? ---
+  // --- Baseline Multiple: outperforming creator's average? ---
   // baselineMultiple is stored as integer×10 in DB (2.5x = 25), so divide by 10
   let baselineNorm: number;
   if (!hasNewFields) {
-    baselineNorm = 0; // no data = no score
+    baselineNorm = 0;
   } else {
     const realMultiple = pin.baselineMultiple / 10;
     baselineNorm = Math.min(1, Math.max(0, realMultiple - 1) / 2);
   }
 
-  // --- Content Relevance (5%): food relevance + has title ---
+  // --- Content Relevance: food relevance + has title (never gated) ---
   let contentScore = 0;
   if (pin.title && pin.title.trim().length > 0) contentScore += 0.33;
   if (pin.description && pin.description.trim().length > 20) contentScore += 0.33;
   if (pin.title && isFoodRelevant(pin.title)) contentScore += 0.34;
 
-  // Compute raw score
-  const rawBeforeGate =
-    velocityNorm * 30 +
-    accelNorm * 20 +
-    engagementNorm * 20 +
-    freshnessNorm * 15 +
-    baselineNorm * 10 +
-    contentScore * 5;
+  // === WEIGHTING WITH REDISTRIBUTION ===
+  // The velocity/acceleration/baseline signals depend on intel-refresh having
+  // multiple snapshots with *changing* saves. For trending pins (which are not
+  // re-fetched over time) those signals are absent. Rather than zero out ~60%
+  // of a genuinely popular pin's score, redistribute the weight of any absent
+  // signal proportionally across the signals we actually have. Saves and
+  // freshness are always present, so they anchor the score.
+  const hasVelocity = (hasNewFields && pin.instantVelocity > 0) || pin.velocity > 0;
+  const hasAccel = hasNewFields && pin.acceleration > 0;
+  const hasBaseline = hasNewFields && pin.baselineMultiple > 0;
 
-  // Apply engagement gate: scale down the score for low-save pins
-  // Content relevance (5%) is NOT gated — that's just metadata quality
-  const gatedPortion =
-    velocityNorm * 30 +
-    accelNorm * 20 +
-    engagementNorm * 20 +
-    freshnessNorm * 15 +
-    baselineNorm * 10;
+  // base weights (gated portion sums to 95; content is the ungated 5)
+  const gatedComponents = [
+    { weight: 30, norm: velocityNorm, present: hasVelocity },
+    { weight: 20, norm: accelNorm, present: hasAccel },
+    { weight: 20, norm: engagementNorm, present: true },
+    { weight: 15, norm: freshnessNorm, present: true },
+    { weight: 10, norm: baselineNorm, present: hasBaseline },
+  ];
+
+  const presentWeight = gatedComponents
+    .filter((c) => c.present)
+    .reduce((sum, c) => sum + c.weight, 0);
+  const scale = presentWeight > 0 ? 95 / presentWeight : 0;
+
+  const gatedPortion = gatedComponents
+    .filter((c) => c.present)
+    .reduce((sum, c) => sum + c.norm * c.weight * scale, 0);
 
   const ungatedPortion = contentScore * 5;
 
