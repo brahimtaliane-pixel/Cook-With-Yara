@@ -64,22 +64,32 @@ export async function discoverKeywords(): Promise<{ processed: number }> {
     PIPELINE_DEFAULTS.TARGET_REGION
   );
 
-  // Fetch all three trend types in parallel for speed
+  // Fetch all three trend types from two sources in parallel:
+  //  1. the general (unfiltered) US trends — the original source
+  //  2. the "Food and drinks" interest feed (trends.pinterest.com
+  //     ?topicInterestIds=918530398158) — added so food trends always surface
+  // Results from both are merged and deduped below.
   const trendTypes = ["growing", "monthly", "yearly"] as const;
+  const sources: { interests?: string }[] = [{}, { interests: "food_and_drinks" }];
+  const fetches = sources.flatMap((src) =>
+    trendTypes.map((type) => ({ type, interests: src.interests }))
+  );
   const trendResults = await Promise.allSettled(
-    trendTypes.map((type) => fetchTrendingKeywords(region, type))
+    fetches.map((f) => fetchTrendingKeywords(region, f.type, f.interests))
   );
 
   // Merge all trends, tag with their source type
   const allTrends: { trend: PinterestTrendKeyword; trendType: string }[] = [];
 
   trendResults.forEach((result, i) => {
+    const { type, interests } = fetches[i];
     if (result.status === "fulfilled") {
       for (const trend of result.value) {
-        allTrends.push({ trend, trendType: trendTypes[i] });
+        allTrends.push({ trend, trendType: type });
       }
     } else {
-      console.error(`Failed to fetch ${trendTypes[i]} trends:`, result.reason);
+      const label = interests ? `${type} (${interests})` : type;
+      console.error(`Failed to fetch ${label} trends:`, result.reason);
     }
   });
 
