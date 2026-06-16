@@ -95,6 +95,11 @@ export async function runAutopilot(
   // 4. Fetch unsent intel pins from last 14 days
   const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
+  // Order by saves (lifetime engagement), not instantVelocity/acceleration —
+  // the velocity/acceleration/baseline fields are not currently populated by
+  // intel-refresh (all zero), so ordering by them surfaces an arbitrary slice
+  // that almost never clears the score gate. Saves is the one reliable signal
+  // and puts the genuinely popular recipes at the top of the candidate list.
   const pins = await db
     .select()
     .from(intelPins)
@@ -104,7 +109,7 @@ export async function runAutopilot(
         gte(intelPins.discoveredAt, fourteenDaysAgo)
       )
     )
-    .orderBy(desc(intelPins.instantVelocity))
+    .orderBy(desc(intelPins.saves))
     .limit(200);
 
   if (pins.length === 0) {
