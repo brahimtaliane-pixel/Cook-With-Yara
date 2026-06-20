@@ -50,7 +50,10 @@ export function buildGuidePrompt(
     sequence,
     "Close-up top-down shots of hands preparing fresh ingredients on a clean",
     "kitchen counter, bright natural daylight, appetizing and photoreal, quick",
-    "cuts between steps, ending on the finished dish. No faces, no text overlays.",
+    "cuts between steps, ending on the finished dish.",
+    // Audio: a female voiceover narrates the steps.
+    "A warm, friendly woman's voice narrates the steps in a clear, upbeat tone.",
+    "No faces on camera, no on-screen text.",
   ].join(" ");
 }
 
