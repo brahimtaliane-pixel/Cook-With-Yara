@@ -1,8 +1,22 @@
 import { db } from "@/lib/db";
 import { pinQueue } from "@/lib/db/schema";
-import { createPin, getPinterestBoardId } from "@/lib/services/pinterest";
+import type { PinQueueItem } from "@/lib/db/schema";
+import {
+  createPin,
+  createVideoPin,
+  registerVideoMedia,
+  uploadVideoToMedia,
+  getMediaStatus,
+  getPinterestBoardId,
+} from "@/lib/services/pinterest";
 import { getConfigValue, shouldRetry } from "@/lib/pipeline/base";
-import { ConfigKeys } from "@/lib/constants";
+import {
+  ConfigKeys,
+  MediaType,
+  PinQueueStatus,
+  PinType,
+  VIDEO_DEFAULTS,
+} from "@/lib/constants";
 import { eq, and, sql, lte, gte } from "drizzle-orm";
 
 const DEFAULT_POSTING_SCHEDULE = {
@@ -65,6 +79,13 @@ export async function processNextPin(runId: string): Promise<{ processed: number
     await getConfigValue(ConfigKeys.MAX_RECYCLED_PINS_PER_DAY, "10"),
     10
   );
+  const maxVideo = parseInt(
+    await getConfigValue(
+      ConfigKeys.MAX_VIDEO_PINS_PER_DAY,
+      String(VIDEO_DEFAULTS.MAX_PINS_PER_DAY)
+    ),
+    10
+  );
 
   const [{ count: multiboardToday }] = await db
     .select({ count: sql<number>`count(*)::int` })
@@ -88,10 +109,30 @@ export async function processNextPin(runId: string): Promise<{ processed: number
       )
     );
 
+  const [{ count: videoToday }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(pinQueue)
+    .where(
+      and(
+        eq(pinQueue.status, PinQueueStatus.POSTED),
+        eq(pinQueue.pinType, PinType.VIDEO),
+        gte(pinQueue.postedAt, todayStart)
+      )
+    );
+
   // Build list of pin types that have hit their daily cap — these should be skipped
   const cappedTypes: string[] = [];
   if (multiboardToday >= maxMultiboard) cappedTypes.push("multiboard");
   if (recycledToday >= maxRecycled) cappedTypes.push("recycled");
+  if (videoToday >= maxVideo) cappedTypes.push(PinType.VIDEO);
+
+  // Resume any video pins already registered+uploaded to Pinterest, whose
+  // transcode we're waiting on. Runs even when no new pins are due. Respects
+  // the daily video cap so we never exceed it.
+  let processed = 0;
+  if (videoToday < maxVideo) {
+    processed += await resumeProcessingVideoPins(maxVideo - videoToday);
+  }
 
   // Count pending pins that are ready to post
   const now = new Date();
@@ -127,8 +168,6 @@ export async function processNextPin(runId: string): Promise<{ processed: number
     `[post-pins] Backlog: ${pendingReady} ready, ${remainingSlots} slots remaining today → posting ${target} this run`
   );
 
-  let processed = 0;
-
   // Build the type exclusion clause for capped pin types (for raw SQL subquery)
   const typeExclusion = cappedTypes.length > 0
     ? `AND pin_type NOT IN (${cappedTypes.map((t) => `'${t}'`).join(",")})`
@@ -162,6 +201,15 @@ export async function processNextPin(runId: string): Promise<{ processed: number
     if (!item) break;
 
     try {
+      if (item.mediaType === MediaType.VIDEO) {
+        // Video: register media + upload the MP4, then hand off to the resume
+        // pass (transcode is async). Doesn't count as "posted" until the pin is
+        // actually created on a later run.
+        await startVideoPin(item);
+        processed++;
+        continue;
+      }
+
       const boardId = await resolveBoardId(item.boardId);
       const pin = await createPin({
         boardId,
@@ -204,4 +252,127 @@ export async function processNextPin(runId: string): Promise<{ processed: number
   }
 
   return { processed };
+}
+
+// === Video pin helpers ===
+
+/**
+ * Register + upload a video pin's MP4 to Pinterest, then park it as
+ * `media_processing` for the resume pass to finish once transcode completes.
+ * The claimed item arrives here with status `posting`.
+ */
+async function startVideoPin(item: PinQueueItem): Promise<void> {
+  if (!item.videoUrl) throw new Error("Video pin has no videoUrl");
+
+  // Already registered (e.g. a retry after upload) — just move to processing.
+  if (!item.pinterestMediaId) {
+    const res = await fetch(item.videoUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch reel (${res.status}) from ${item.videoUrl}`);
+    }
+    const buffer = Buffer.from(await res.arrayBuffer());
+
+    const media = await registerVideoMedia();
+    await uploadVideoToMedia(media.upload_url, media.upload_parameters, buffer);
+
+    await db
+      .update(pinQueue)
+      .set({
+        pinterestMediaId: media.media_id,
+        status: PinQueueStatus.MEDIA_PROCESSING,
+      })
+      .where(eq(pinQueue.id, item.id));
+  } else {
+    await db
+      .update(pinQueue)
+      .set({ status: PinQueueStatus.MEDIA_PROCESSING })
+      .where(eq(pinQueue.id, item.id));
+  }
+}
+
+/**
+ * Poll Pinterest transcode for video pins parked in `media_processing` and
+ * create the pin once the media succeeds. Returns the number of pins posted.
+ * Atomically claims each row so concurrent runs can't double-post.
+ */
+async function resumeProcessingVideoPins(limit: number): Promise<number> {
+  let posted = 0;
+
+  for (let i = 0; i < limit; i++) {
+    // Claim one media_processing row.
+    const [item] = await db
+      .update(pinQueue)
+      .set({ status: PinQueueStatus.POSTING })
+      .where(
+        and(
+          eq(pinQueue.status, PinQueueStatus.MEDIA_PROCESSING),
+          sql`${pinQueue.id} = (
+            SELECT ${pinQueue.id} FROM ${pinQueue}
+            WHERE ${pinQueue.status} = ${PinQueueStatus.MEDIA_PROCESSING}
+            ORDER BY ${pinQueue.scheduledAt} ASC
+            LIMIT 1
+            FOR UPDATE SKIP LOCKED
+          )`
+        )
+      )
+      .returning();
+
+    if (!item) break;
+
+    try {
+      if (!item.pinterestMediaId) throw new Error("No pinterest_media_id on row");
+
+      const media = await getMediaStatus(item.pinterestMediaId);
+
+      if (media.status === "succeeded") {
+        const boardId = await resolveBoardId(item.boardId);
+        const pin = await createVideoPin({
+          boardId,
+          title: item.title,
+          description: item.description,
+          link: item.link,
+          mediaId: item.pinterestMediaId,
+          coverImageUrl: item.coverImageUrl ?? item.imageUrl,
+          altText: item.altText ?? undefined,
+        });
+
+        await db
+          .update(pinQueue)
+          .set({
+            status: PinQueueStatus.POSTED,
+            postedAt: new Date(),
+            pinterestPinId: pin.id,
+          })
+          .where(eq(pinQueue.id, item.id));
+
+        posted++;
+      } else if (media.status === "failed") {
+        throw new Error("Pinterest media transcode failed");
+      } else {
+        // Still registered/processing — park it again for the next run.
+        await db
+          .update(pinQueue)
+          .set({ status: PinQueueStatus.MEDIA_PROCESSING })
+          .where(eq(pinQueue.id, item.id));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      const newRetryCount = item.retryCount + 1;
+      const willRetry = shouldRetry(newRetryCount);
+      await db
+        .update(pinQueue)
+        .set({
+          // Retry by re-parking as media_processing; give up to failed otherwise.
+          status: willRetry
+            ? PinQueueStatus.MEDIA_PROCESSING
+            : PinQueueStatus.FAILED,
+          retryCount: newRetryCount,
+          failureReason: message,
+        })
+        .where(eq(pinQueue.id, item.id));
+      console.error(`[post-pins] Video pin ${item.id} resume failed:`, message);
+    }
+  }
+
+  return posted;
 }

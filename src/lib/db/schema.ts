@@ -48,6 +48,14 @@ export const articles = pgTable("articles", {
   publishedAt: timestamp("published_at"),
   recycleCount: integer("recycle_count").default(0).notNull(),
   lastRecycledAt: timestamp("last_recycled_at"),
+  // === Video reel (Veo) — a decoupled artifact layered onto a PUBLISHED article ===
+  // none | generating | ready | failed
+  videoStatus: text("video_status").default("none").notNull(),
+  videoUrl: text("video_url"),
+  videoTaskId: text("video_task_id"), // Veo long-running operation name
+  videoKeyIndex: integer("video_key_index"), // which Gemini key started the op (must poll with same key)
+  videoStartedAt: timestamp("video_started_at"), // when Veo generation began (for daily cap)
+  videoRetryCount: integer("video_retry_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -164,6 +172,12 @@ export const pinQueue = pgTable("pin_queue", {
   altText: text("alt_text"),
   pinType: text("pin_type").default("original").notNull(),
   performanceScore: integer("performance_score"),
+  // === Video pin support ===
+  // image | video. Drives the posting flow in processNextPin.
+  mediaType: text("media_type").default("image").notNull(),
+  videoUrl: text("video_url"), // source MP4 (Vercel Blob) for video rows
+  coverImageUrl: text("cover_image_url"), // required cover for Pinterest video pins
+  pinterestMediaId: text("pinterest_media_id"), // set after /media register+upload, polled before pin create
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
