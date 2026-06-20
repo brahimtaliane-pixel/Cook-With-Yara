@@ -603,6 +603,75 @@ function ConfigPageInner() {
         </CardContent>
       </Card>
 
+      {/* Video Reels (Veo) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            Video Reels
+            <Badge variant={config[ConfigKeys.VIDEO_ENABLED] === "true" ? "default" : "secondary"}>
+              {config[ConfigKeys.VIDEO_ENABLED] === "true" ? "Active" : "Off"}
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Generate short AI video reels (Google Veo) from each published recipe&apos;s hero image and post them as video pins. ⚠️ Veo is billed per clip — keep the daily cap low.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center gap-3">
+            <Switch
+              id="video-toggle"
+              checked={config[ConfigKeys.VIDEO_ENABLED] === "true"}
+              onCheckedChange={(checked: boolean) =>
+                updateConfig(ConfigKeys.VIDEO_ENABLED, String(checked))
+              }
+            />
+            <Label htmlFor="video-toggle">Enable Video Reels</Label>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="veo-model">Veo Model</Label>
+            <Input
+              id="veo-model"
+              value={config[ConfigKeys.VEO_MODEL] ?? "veo-3.1-fast-generate-preview"}
+              onChange={(e) => updateConfig(ConfigKeys.VEO_MODEL, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Fast ≈ $1.20/clip · full (veo-3.1-generate-preview) ≈ $3/clip · lite (veo-3.1-lite-generate-preview) cheapest.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-video-gen">Max Video Generations Per Day</Label>
+            <Input
+              id="max-video-gen"
+              type="number"
+              min={0}
+              max={20}
+              value={config[ConfigKeys.MAX_VIDEO_GENERATIONS_PER_DAY] ?? "1"}
+              onChange={(e) => updateConfig(ConfigKeys.MAX_VIDEO_GENERATIONS_PER_DAY, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Hard cost ceiling: how many new Veo clips to produce per day. This is the main spend lever.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="max-video-pins">Max Video Pins Per Day</Label>
+            <Input
+              id="max-video-pins"
+              type="number"
+              min={0}
+              max={20}
+              value={config[ConfigKeys.MAX_VIDEO_PINS_PER_DAY] ?? "1"}
+              onChange={(e) => updateConfig(ConfigKeys.MAX_VIDEO_PINS_PER_DAY, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Daily budget for posting video pins to Pinterest (separate from the image-pin cap).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Save Button */}
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving}>

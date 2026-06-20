@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
-import Script from "next/script";
 import "./globals.css";
 
 const inter = Inter({
@@ -70,17 +69,17 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${playfair.variable} font-sans antialiased`}
       >
-        {/* AdSense loader. strategy="beforeInteractive" makes Next.js hoist
-            this into the server-rendered <head>, matching what AdSense's
-            "place between <head></head>" verification expects. Gated on the
-            env var so non-prod builds don't load it. */}
+        {/* AdSense loader rendered as a plain <script>. React 19 hoists an
+            async script into the server-rendered <head> as a literal tag, which
+            is what AdSense's ownership verification statically parses for.
+            (next/script's beforeInteractive only emits a preload + RSC payload,
+            not a literal tag, so AdSense couldn't find it.) Gated on the env var
+            so non-prod builds don't load it. */}
         {process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID && (
-          <Script
-            id="adsense-loader"
+          <script
             async
             src={`https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${process.env.NEXT_PUBLIC_ADSENSE_CLIENT_ID}`}
             crossOrigin="anonymous"
-            strategy="beforeInteractive"
           />
         )}
         {children}

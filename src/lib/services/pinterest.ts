@@ -234,6 +234,109 @@ export async function createPin(params: CreatePinParams): Promise<PinterestPin> 
   });
 }
 
+// === Video Pins ===
+//
+// Pinterest video pins are a 4-step flow (vs. one call for image pins):
+//   1. POST /media {media_type:"video"}  -> media_id + presigned S3 upload form
+//   2. multipart POST the MP4 to the presigned URL (no auth header — it's S3)
+//   3. poll GET /media/{media_id} until status === "succeeded" (async transcode)
+//   4. POST /pins with media_source {source_type:"video_id", media_id, cover_image_url}
+
+export interface RegisterMediaResponse {
+  media_id: string;
+  media_type: string;
+  status: string;
+  upload_url: string;
+  upload_parameters: Record<string, string>;
+}
+
+export type MediaUploadStatus =
+  | "registered"
+  | "processing"
+  | "succeeded"
+  | "failed";
+
+export interface MediaStatusResponse {
+  media_id: string;
+  media_type: string;
+  status: MediaUploadStatus;
+}
+
+export interface CreateVideoPinParams {
+  boardId: string;
+  title: string;
+  description: string;
+  link: string;
+  mediaId: string;
+  coverImageUrl: string;
+  altText?: string;
+}
+
+/** Step 1: register a video media upload, returns the presigned S3 upload form. */
+export async function registerVideoMedia(): Promise<RegisterMediaResponse> {
+  return pinterestFetch<RegisterMediaResponse>("/media", {
+    method: "POST",
+    body: JSON.stringify({ media_type: "video" }),
+  });
+}
+
+/**
+ * Step 2: upload the MP4 to the presigned URL. This is a raw AWS S3 POST — the
+ * upload_parameters fields must come first, then the `file` part. No Pinterest
+ * auth header (the presigned form carries its own credentials).
+ */
+export async function uploadVideoToMedia(
+  uploadUrl: string,
+  uploadParameters: Record<string, string>,
+  video: Buffer,
+  contentType = "video/mp4",
+): Promise<void> {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(uploadParameters)) {
+    form.append(key, value);
+  }
+  // The binary file part must be appended last.
+  form.append(
+    "file",
+    new Blob([new Uint8Array(video)], { type: contentType }),
+    "reel.mp4",
+  );
+
+  const res = await fetch(uploadUrl, { method: "POST", body: form });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Video upload to S3 failed (${res.status}): ${body}`);
+  }
+}
+
+/** Step 3: check transcode status. */
+export async function getMediaStatus(
+  mediaId: string,
+): Promise<MediaStatusResponse> {
+  return pinterestFetch<MediaStatusResponse>(`/media/${mediaId}`);
+}
+
+/** Step 4: create the video pin (cover image is mandatory). */
+export async function createVideoPin(
+  params: CreateVideoPinParams,
+): Promise<PinterestPin> {
+  return pinterestFetch<PinterestPin>("/pins", {
+    method: "POST",
+    body: JSON.stringify({
+      board_id: params.boardId,
+      title: params.title,
+      description: params.description,
+      link: params.link,
+      ...(params.altText ? { alt_text: params.altText } : {}),
+      media_source: {
+        source_type: "video_id",
+        media_id: params.mediaId,
+        cover_image_url: params.coverImageUrl,
+      },
+    }),
+  });
+}
+
 // === Pin Analytics ===
 
 export interface PinAnalyticsData {

@@ -25,6 +25,49 @@ export const ArticleStatus = {
 
 export type ArticleStatus = (typeof ArticleStatus)[keyof typeof ArticleStatus];
 
+// Video reel lifecycle (articles.video_status). Decoupled from the article
+// status machine — a reel is an optional artifact layered onto a PUBLISHED article.
+export const VideoStatus = {
+  NONE: "none",
+  GENERATING: "generating",
+  READY: "ready",
+  FAILED: "failed",
+} as const;
+
+export type VideoStatus = (typeof VideoStatus)[keyof typeof VideoStatus];
+
+// pin_queue.media_type — drives the posting flow in processNextPin.
+export const MediaType = {
+  IMAGE: "image",
+  VIDEO: "video",
+} as const;
+
+export type MediaType = (typeof MediaType)[keyof typeof MediaType];
+
+// pin_queue.status value used while a video is registered+uploaded to Pinterest
+// and its transcode is being polled, before the pin itself is created.
+export const PinQueueStatus = {
+  PENDING: "pending",
+  POSTING: "posting",
+  MEDIA_PROCESSING: "media_processing",
+  POSTED: "posted",
+  FAILED: "failed",
+} as const;
+
+export type PinQueueStatus =
+  (typeof PinQueueStatus)[keyof typeof PinQueueStatus];
+
+// pin_queue.pin_type bucket for the daily-cap rotation (alongside
+// original / multiboard / recycled).
+export const PinType = {
+  ORIGINAL: "original",
+  MULTIBOARD: "multiboard",
+  RECYCLED: "recycled",
+  VIDEO: "video",
+} as const;
+
+export type PinType = (typeof PinType)[keyof typeof PinType];
+
 export const PipelineRunStatus = {
   RUNNING: "running",
   COMPLETED: "completed",
@@ -44,6 +87,19 @@ export const PIPELINE_DEFAULTS = {
   PINTEREST_PIN_HEIGHT: 1500,
   AUTOPILOT_MIN_SCORE: 65,
   AUTOPILOT_MAX_PER_RUN: 2,
+} as const;
+
+// === Video (Veo) Defaults ===
+
+export const VIDEO_DEFAULTS = {
+  // Veo 3.1 Fast: good motion + audio, ~2.5x cheaper than full. See AskUser decision.
+  MODEL: "veo-3.1-fast-generate-preview",
+  ASPECT_RATIO: "9:16", // vertical, ideal for Pinterest
+  RESOLUTION: "720p",
+  DURATION_SECONDS: 8,
+  // Cost ceilings (overridable via pipeline_config).
+  MAX_GENERATIONS_PER_DAY: 1,
+  MAX_PINS_PER_DAY: 1,
 } as const;
 
 // === Pipeline Config Keys ===
@@ -73,6 +129,11 @@ export const ConfigKeys = {
   MAX_RECYCLES_PER_ARTICLE: "max_recycles_per_article",
   RECYCLE_COOLDOWN_DAYS: "recycle_cooldown_days",
   MAX_RECYCLED_PINS_PER_DAY: "max_recycled_pins_per_day",
+  // Video reels (Veo)
+  VIDEO_ENABLED: "video_enabled",
+  VEO_MODEL: "veo_model",
+  MAX_VIDEO_GENERATIONS_PER_DAY: "max_video_generations_per_day",
+  MAX_VIDEO_PINS_PER_DAY: "max_video_pins_per_day",
 } as const;
 
 // === Intel ===
