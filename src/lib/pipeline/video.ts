@@ -139,8 +139,9 @@ async function startNewVideos(): Promise<number> {
     return 0;
   }
 
-  // Claim one eligible article: published, no reel yet, has a hero (seed frame)
-  // and a pin image (required cover). Newest first.
+  // Claim one eligible article: published, no reel yet, and a pin image (the
+  // required video-pin cover). The reel is text-to-video from the recipe steps,
+  // so a hero seed image is not needed. Newest first.
   const [article] = await db
     .update(articles)
     .set({
@@ -152,13 +153,11 @@ async function startNewVideos(): Promise<number> {
       and(
         eq(articles.status, ArticleStatus.PUBLISHED),
         eq(articles.videoStatus, VideoStatus.NONE),
-        sql`${articles.heroImageUrl} IS NOT NULL`,
         sql`${articles.pinImageUrl} IS NOT NULL`,
         sql`${articles.id} = (
           SELECT ${articles.id} FROM ${articles}
           WHERE ${articles.status} = ${ArticleStatus.PUBLISHED}
           AND ${articles.videoStatus} = ${VideoStatus.NONE}
-          AND ${articles.heroImageUrl} IS NOT NULL
           AND ${articles.pinImageUrl} IS NOT NULL
           ORDER BY ${articles.publishedAt} DESC NULLS LAST
           LIMIT 1
@@ -172,9 +171,13 @@ async function startNewVideos(): Promise<number> {
 
   try {
     const model = await getConfigValue(ConfigKeys.VEO_MODEL, VIDEO_DEFAULTS.MODEL);
+    const meta = extractRecipeMeta(
+      article.recipeJsonLd as Record<string, unknown> | null,
+    );
     const { operationName, keyIndex } = await startRecipeVideo({
-      heroImageUrl: article.heroImageUrl!,
       title: article.title || "this recipe",
+      steps: extractRecipeSteps(article.recipeJsonLd),
+      ingredients: meta.topIngredients,
       model,
     });
 
@@ -213,6 +216,25 @@ async function startNewVideos(): Promise<number> {
 }
 
 // --- Helpers --------------------------------------------------------------
+
+/**
+ * Pull ordered step labels from schema.org Recipe JSON-LD. recipeInstructions
+ * is an array of HowToStep objects ({ name, text }) or plain strings; prefer the
+ * short `name` for a snappy guide montage, falling back to `text`.
+ */
+function extractRecipeSteps(recipeJsonLd: unknown): string[] {
+  const ld = recipeJsonLd as Record<string, unknown> | null | undefined;
+  const raw = ld?.recipeInstructions;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((s) => {
+      if (typeof s === "string") return s;
+      const step = s as Record<string, unknown>;
+      return (step.name as string) || (step.text as string) || "";
+    })
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 async function markVideoFailure(article: Article, reason: string): Promise<void> {
   const newRetry = article.videoRetryCount + 1;

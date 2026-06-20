@@ -39,6 +39,7 @@ yarn-error.log*
 
 # local pin/render test artifacts
 /test-*.png
+*.mp4
 
 # typescript
 *.tsbuildinfo

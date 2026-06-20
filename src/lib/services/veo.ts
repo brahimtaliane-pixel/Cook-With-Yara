@@ -1,5 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
-import type { GenerateVideosOperation } from "@google/genai";
+import { GoogleGenAI, GenerateVideosOperation } from "@google/genai";
 import { getGeminiApiKeys } from "@/lib/services/gemini-keys";
 import { VIDEO_DEFAULTS } from "@/lib/constants";
 
@@ -9,10 +8,12 @@ import { VIDEO_DEFAULTS } from "@/lib/constants";
 // operation name) and pollRecipeVideo checks it on a later cron run.
 
 export interface StartVideoParams {
-  /** Public URL of the recipe hero image, used as the seed frame. */
-  heroImageUrl: string;
-  /** Recipe title / short descriptor, woven into the motion prompt. */
+  /** Recipe title — anchors the guide. */
   title: string;
+  /** Ordered cooking steps (short labels) — the spine of the how-to montage. */
+  steps?: string[];
+  /** Key ingredients, used when steps are sparse. */
+  ingredients?: string[];
   model?: string;
   aspectRatio?: string;
   resolution?: string;
@@ -33,44 +34,49 @@ export interface PollVideoResult {
   error?: string;
 }
 
-// Food-focused, halal-safe motion prompt. We seed from the already-vetted hero
-// image so the dish stays consistent; the prompt only describes camera/motion.
-function buildMotionPrompt(title: string): string {
+// Build a short "how it's made" guide prompt from the recipe's actual steps.
+// This is text-to-video (no seed image): seeding from the finished-dish hero
+// would just animate the final plate, the opposite of showing the process.
+// Hands preparing food are wanted; faces/people are not.
+function buildGuidePrompt(
+  title: string,
+  steps: string[],
+  ingredients: string[],
+): string {
+  // Keep it to a handful of beats — an 8s reel can only show so much.
+  const beats = (steps.length ? steps : ingredients).slice(0, 5);
+  const sequence = beats.length
+    ? ` Show these steps in quick succession: ${beats.join("; ")}.`
+    : "";
   return [
-    `Appetizing food video of ${title}.`,
-    "Slow cinematic push-in, gentle rising steam, soft natural light,",
-    "shallow depth of field, subtle glistening texture on the food.",
-    "No people, no hands, no text overlays. Photoreal, mouth-watering.",
+    `Fast-paced overhead cooking tutorial showing how to make ${title}.`,
+    sequence,
+    "Close-up top-down shots of hands preparing fresh ingredients on a clean",
+    "kitchen counter, bright natural daylight, appetizing and photoreal, quick",
+    "cuts between steps, ending on the finished dish. No faces, no text overlays.",
   ].join(" ");
 }
 
 const NEGATIVE_PROMPT =
-  "people, hands, faces, text, watermark, logo, captions, blurry, distorted, low quality";
-
-async function fetchImageBytes(
-  url: string,
-): Promise<{ imageBytes: string; mimeType: string }> {
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch hero image (${res.status}) from ${url}`);
-  }
-  const mimeType = res.headers.get("content-type") || "image/png";
-  const buf = Buffer.from(await res.arrayBuffer());
-  return { imageBytes: buf.toString("base64"), mimeType };
-}
+  "faces, people staring at camera, text overlay, captions, watermark, logo, " +
+  "extra fingers, deformed hands, blurry, distorted, low quality";
 
 /**
- * Kick off a Veo image-to-video generation. Returns the long-running operation
- * name plus the key index used (needed to poll with the same key). Rotates keys
- * on failure so one exhausted key doesn't stall the pipeline.
+ * Kick off a Veo text-to-video generation of a short recipe how-to guide.
+ * Returns the long-running operation name plus the key index used (needed to
+ * poll with the same key). Rotates keys on failure so one exhausted key doesn't
+ * stall the pipeline.
  */
 export async function startRecipeVideo(
   params: StartVideoParams,
 ): Promise<StartVideoResult> {
   const keys = getGeminiApiKeys();
   const model = params.model ?? VIDEO_DEFAULTS.MODEL;
-  const prompt = buildMotionPrompt(params.title);
-  const image = await fetchImageBytes(params.heroImageUrl);
+  const prompt = buildGuidePrompt(
+    params.title,
+    params.steps ?? [],
+    params.ingredients ?? [],
+  );
 
   let lastErr: unknown;
   for (const [keyIndex, apiKey] of keys.entries()) {
@@ -79,7 +85,6 @@ export async function startRecipeVideo(
       const operation = await ai.models.generateVideos({
         model,
         prompt,
-        image: { imageBytes: image.imageBytes, mimeType: image.mimeType },
         config: {
           numberOfVideos: 1,
           aspectRatio: params.aspectRatio ?? VIDEO_DEFAULTS.ASPECT_RATIO,
@@ -87,7 +92,6 @@ export async function startRecipeVideo(
           durationSeconds:
             params.durationSeconds ?? VIDEO_DEFAULTS.DURATION_SECONDS,
           negativePrompt: NEGATIVE_PROMPT,
-          personGeneration: "dont_allow",
         },
       });
 
@@ -121,10 +125,12 @@ export async function pollRecipeVideo(
 
   const ai = new GoogleGenAI({ apiKey });
 
-  // Reconstruct the operation from its name (only `name` is needed to refresh).
-  const operation = await ai.operations.getVideosOperation({
-    operation: { name: operationName } as GenerateVideosOperation,
-  });
+  // Reconstruct the operation from its name. getVideosOperation only reads
+  // `operation.name`, but it also calls `operation._fromAPIResponse(...)`, so we
+  // need a real GenerateVideosOperation instance (not a plain object).
+  const op = new GenerateVideosOperation();
+  op.name = operationName;
+  const operation = await ai.operations.getVideosOperation({ operation: op });
 
   if (!operation.done) {
     return { status: "processing" };

@@ -94,7 +94,7 @@ export const PIPELINE_DEFAULTS = {
 export const VIDEO_DEFAULTS = {
   // Veo 3.1 Fast: good motion + audio, ~2.5x cheaper than full. See AskUser decision.
   MODEL: "veo-3.1-fast-generate-preview",
-  ASPECT_RATIO: "9:16", // vertical, ideal for Pinterest
+  ASPECT_RATIO: "9:16", // vertical/portrait — fills a phone screen
   RESOLUTION: "720p",
   DURATION_SECONDS: 8,
   // Cost ceilings (overridable via pipeline_config).
