@@ -613,7 +613,7 @@ function ConfigPageInner() {
             </Badge>
           </CardTitle>
           <CardDescription>
-            Generate short AI video reels (Google Veo) from each published recipe&apos;s hero image and post them as video pins. ⚠️ Veo is billed per clip — keep the daily cap low.
+            Generate short AI &quot;how it&apos;s made&quot; reels from each published recipe&apos;s steps and post them as video pins. ⚠️ Billed per clip — keep the daily cap low.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -629,6 +629,18 @@ function ConfigPageInner() {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="video-provider">Provider</Label>
+            <Input
+              id="video-provider"
+              value={config[ConfigKeys.VIDEO_PROVIDER] ?? "grok"}
+              onChange={(e) => updateConfig(ConfigKeys.VIDEO_PROVIDER, e.target.value.trim())}
+            />
+            <p className="text-xs text-muted-foreground">
+              <code>veo</code> (Google, ~$1.20/clip, adds audio) or <code>grok</code> (xAI Grok Imagine, ~$0.40/clip). Requires XAI_API_KEY for grok.
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="veo-model">Veo Model</Label>
             <Input
               id="veo-model"
@@ -637,6 +649,18 @@ function ConfigPageInner() {
             />
             <p className="text-xs text-muted-foreground">
               Fast ≈ $1.20/clip · full (veo-3.1-generate-preview) ≈ $3/clip · lite (veo-3.1-lite-generate-preview) cheapest.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="grok-model">Grok Model</Label>
+            <Input
+              id="grok-model"
+              value={config[ConfigKeys.GROK_MODEL] ?? "grok-imagine-video"}
+              onChange={(e) => updateConfig(ConfigKeys.GROK_MODEL, e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Used when Provider is <code>grok</code>. grok-imagine-video ≈ $0.05/s · grok-imagine-video-1.5 ≈ $0.08/s.
             </p>
           </div>
 

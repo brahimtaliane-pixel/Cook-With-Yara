@@ -1,65 +1,18 @@
 import { GoogleGenAI, GenerateVideosOperation } from "@google/genai";
 import { getGeminiApiKeys } from "@/lib/services/gemini-keys";
 import { VIDEO_DEFAULTS } from "@/lib/constants";
+import {
+  buildGuidePrompt,
+  NEGATIVE_PROMPT,
+  type StartVideoParams,
+  type StartVideoResult,
+  type PollVideoResult,
+} from "@/lib/services/video-prompt";
 
-// Veo (Google) recipe-reel generation. Mirrors nano-banana.ts: rotates across
-// the configured Gemini API keys. Unlike image gen, Veo is a long-running
-// operation — startRecipeVideo kicks it off (returns immediately with the
-// operation name) and pollRecipeVideo checks it on a later cron run.
-
-export interface StartVideoParams {
-  /** Recipe title — anchors the guide. */
-  title: string;
-  /** Ordered cooking steps (short labels) — the spine of the how-to montage. */
-  steps?: string[];
-  /** Key ingredients, used when steps are sparse. */
-  ingredients?: string[];
-  model?: string;
-  aspectRatio?: string;
-  resolution?: string;
-  durationSeconds?: number;
-}
-
-export interface StartVideoResult {
-  operationName: string;
-  /** Index into getGeminiApiKeys() — the op MUST be polled with the same key. */
-  keyIndex: number;
-}
-
-export interface PollVideoResult {
-  status: "processing" | "succeeded" | "failed";
-  /** MP4 bytes, present only when status === "succeeded". */
-  data?: Buffer;
-  mimeType?: string;
-  error?: string;
-}
-
-// Build a short "how it's made" guide prompt from the recipe's actual steps.
-// This is text-to-video (no seed image): seeding from the finished-dish hero
-// would just animate the final plate, the opposite of showing the process.
-// Hands preparing food are wanted; faces/people are not.
-function buildGuidePrompt(
-  title: string,
-  steps: string[],
-  ingredients: string[],
-): string {
-  // Keep it to a handful of beats — an 8s reel can only show so much.
-  const beats = (steps.length ? steps : ingredients).slice(0, 5);
-  const sequence = beats.length
-    ? ` Show these steps in quick succession: ${beats.join("; ")}.`
-    : "";
-  return [
-    `Fast-paced overhead cooking tutorial showing how to make ${title}.`,
-    sequence,
-    "Close-up top-down shots of hands preparing fresh ingredients on a clean",
-    "kitchen counter, bright natural daylight, appetizing and photoreal, quick",
-    "cuts between steps, ending on the finished dish. No faces, no text overlays.",
-  ].join(" ");
-}
-
-const NEGATIVE_PROMPT =
-  "faces, people staring at camera, text overlay, captions, watermark, logo, " +
-  "extra fingers, deformed hands, blurry, distorted, low quality";
+// Veo (Google) recipe-reel backend. Mirrors nano-banana.ts: rotates across the
+// configured Gemini API keys. Veo is a long-running operation — startVeoVideo
+// kicks it off (returns immediately with the operation name) and pollVeoVideo
+// checks it on a later cron run. Routed via video-generator.ts.
 
 /**
  * Kick off a Veo text-to-video generation of a short recipe how-to guide.
@@ -67,7 +20,7 @@ const NEGATIVE_PROMPT =
  * poll with the same key). Rotates keys on failure so one exhausted key doesn't
  * stall the pipeline.
  */
-export async function startRecipeVideo(
+export async function startVeoVideo(
   params: StartVideoParams,
 ): Promise<StartVideoResult> {
   const keys = getGeminiApiKeys();
@@ -115,7 +68,7 @@ export async function startRecipeVideo(
  * Polled across cron runs by reconstructing the operation from its name — must
  * use the same API key that started it.
  */
-export async function pollRecipeVideo(
+export async function pollVeoVideo(
   operationName: string,
   keyIndex: number,
 ): Promise<PollVideoResult> {

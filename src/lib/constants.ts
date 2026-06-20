@@ -92,8 +92,13 @@ export const PIPELINE_DEFAULTS = {
 // === Video (Veo) Defaults ===
 
 export const VIDEO_DEFAULTS = {
+  // Which backend generates reels: "veo" (Google) or "grok" (xAI Grok Imagine).
+  // Default grok — ~3x cheaper per clip and verified to match the guide style.
+  PROVIDER: "grok",
   // Veo 3.1 Fast: good motion + audio, ~2.5x cheaper than full. See AskUser decision.
   MODEL: "veo-3.1-fast-generate-preview",
+  // Grok Imagine video: ~$0.05/sec (≈3x cheaper than Veo Fast).
+  GROK_MODEL: "grok-imagine-video",
   ASPECT_RATIO: "9:16", // vertical/portrait — fills a phone screen
   RESOLUTION: "720p",
   DURATION_SECONDS: 8,
@@ -129,9 +134,11 @@ export const ConfigKeys = {
   MAX_RECYCLES_PER_ARTICLE: "max_recycles_per_article",
   RECYCLE_COOLDOWN_DAYS: "recycle_cooldown_days",
   MAX_RECYCLED_PINS_PER_DAY: "max_recycled_pins_per_day",
-  // Video reels (Veo)
+  // Video reels
   VIDEO_ENABLED: "video_enabled",
+  VIDEO_PROVIDER: "video_provider", // "veo" | "grok"
   VEO_MODEL: "veo_model",
+  GROK_MODEL: "grok_model",
   MAX_VIDEO_GENERATIONS_PER_DAY: "max_video_generations_per_day",
   MAX_VIDEO_PINS_PER_DAY: "max_video_pins_per_day",
 } as const;

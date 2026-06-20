@@ -10,7 +10,7 @@ import {
   VIDEO_DEFAULTS,
 } from "@/lib/constants";
 import { getConfigValue, shouldRetry } from "@/lib/pipeline/base";
-import { startRecipeVideo, pollRecipeVideo } from "@/lib/services/veo";
+import { startRecipeVideo, pollRecipeVideo } from "@/lib/services/video-generator";
 import { getCanonicalUrl } from "@/lib/utils/seo";
 import { extractRecipeMeta } from "@/lib/utils/recipe-meta";
 import { generatePinterestCopy } from "@/lib/services/pinterest-copy";
@@ -170,7 +170,8 @@ async function startNewVideos(): Promise<number> {
   if (!article) return 0;
 
   try {
-    const model = await getConfigValue(ConfigKeys.VEO_MODEL, VIDEO_DEFAULTS.MODEL);
+    // The provider (and its model) is resolved inside startRecipeVideo from the
+    // VIDEO_PROVIDER config.
     const meta = extractRecipeMeta(
       article.recipeJsonLd as Record<string, unknown> | null,
     );
@@ -178,7 +179,6 @@ async function startNewVideos(): Promise<number> {
       title: article.title || "this recipe",
       steps: extractRecipeSteps(article.recipeJsonLd),
       ingredients: meta.topIngredients,
-      model,
     });
 
     await db

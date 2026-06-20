@@ -16,7 +16,7 @@ import { db } from "../src/lib/db";
 import { articles } from "../src/lib/db/schema";
 import { ArticleStatus } from "../src/lib/constants";
 import { extractRecipeMeta } from "../src/lib/utils/recipe-meta";
-import { startRecipeVideo, pollRecipeVideo } from "../src/lib/services/veo";
+import { startRecipeVideo, pollRecipeVideo } from "../src/lib/services/video-generator";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 
 function extractSteps(recipeJsonLd: unknown): string[] {
@@ -85,8 +85,15 @@ async function main() {
     process.exit(0);
   }
 
-  console.log("Starting Veo generation (Veo 3.1 Fast — usually 1–3 min)…");
+  const providerArg = process.argv
+    .find((a) => a.startsWith("--provider="))
+    ?.split("=")[1] as "veo" | "grok" | undefined;
+
+  console.log(
+    `Starting video generation (${providerArg ?? "config provider"} — usually 1–3 min)…`,
+  );
   const { operationName, keyIndex } = await startRecipeVideo({
+    provider: providerArg,
     title: article.title || "this recipe",
     steps,
     ingredients: meta.topIngredients,
