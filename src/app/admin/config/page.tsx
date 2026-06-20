@@ -463,8 +463,39 @@ function ConfigPageInner() {
               onChange={(e) => updateConfig(ConfigKeys.MAX_PINS_PER_DAY, e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Total pins posted per day. 2 pin designs per article, so 20 articles = 40 pins.
+              Overall ceiling for pins posted per day across all types.
             </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="linked-per-day">Linked Pins / Day</Label>
+              <Input
+                id="linked-per-day"
+                type="number"
+                min={0}
+                max={40}
+                value={config[ConfigKeys.MAX_LINKED_PINS_PER_DAY] ?? "3"}
+                onChange={(e) => updateConfig(ConfigKeys.MAX_LINKED_PINS_PER_DAY, e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Image pins that link to the recipe (drive traffic). Newest recipes first.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="nolink-per-day">No-Link Pins / Day</Label>
+              <Input
+                id="nolink-per-day"
+                type="number"
+                min={0}
+                max={40}
+                value={config[ConfigKeys.MAX_NOLINK_PINS_PER_DAY] ?? "2"}
+                onChange={(e) => updateConfig(ConfigKeys.MAX_NOLINK_PINS_PER_DAY, e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Image pins with no destination link (reach/engagement only).
+              </p>
+            </div>
           </div>
 
           <div className="space-y-2">

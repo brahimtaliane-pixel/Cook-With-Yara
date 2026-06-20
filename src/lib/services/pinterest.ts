@@ -23,7 +23,8 @@ export interface CreatePinParams {
   title: string;
   description: string;
   imageUrl: string;
-  link: string;
+  /** Destination URL. Omit/empty for a no-link pin (no outbound traffic). */
+  link?: string;
   altText?: string;
 }
 
@@ -224,7 +225,7 @@ export async function createPin(params: CreatePinParams): Promise<PinterestPin> 
       board_id: params.boardId,
       title: params.title,
       description: params.description,
-      link: params.link,
+      ...(params.link ? { link: params.link } : {}),
       ...(params.altText ? { alt_text: params.altText } : {}),
       media_source: {
         source_type: "image_url",

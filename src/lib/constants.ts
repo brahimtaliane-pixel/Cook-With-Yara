@@ -60,7 +60,8 @@ export type PinQueueStatus =
 // pin_queue.pin_type bucket for the daily-cap rotation (alongside
 // original / multiboard / recycled).
 export const PinType = {
-  ORIGINAL: "original",
+  ORIGINAL: "original", // image pin WITH a link to the recipe
+  NOLINK: "nolink", // image pin with NO destination link
   MULTIBOARD: "multiboard",
   RECYCLED: "recycled",
   VIDEO: "video",
@@ -126,6 +127,9 @@ export const ConfigKeys = {
   AUTOPILOT_MAX_PER_RUN: "autopilot_max_per_run",
   PINS_PER_CRON_RUN: "pins_per_cron_run",
   MAX_PINS_PER_DAY: "max_pins_per_day",
+  // Daily caps for the linked / no-link image-pin mix (newest recipes first).
+  MAX_LINKED_PINS_PER_DAY: "max_linked_pins_per_day",
+  MAX_NOLINK_PINS_PER_DAY: "max_nolink_pins_per_day",
   PINTEREST_BOARD_MAP: "pinterest_board_map",
   PIN_POSTING_SCHEDULE: "pin_posting_schedule",
   MULTI_BOARD_ENABLED: "multi_board_enabled",

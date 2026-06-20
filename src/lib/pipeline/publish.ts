@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
 import { articles, pinQueue, keywords } from "@/lib/db/schema";
-import { ArticleStatus, ConfigKeys } from "@/lib/constants";
+import { ArticleStatus, ConfigKeys, PinType } from "@/lib/constants";
 import { getCanonicalUrl } from "@/lib/utils/seo";
 import { shouldRetry, getConfigValue } from "@/lib/pipeline/base";
-import { getBoardForArticle, getBoardsForArticle } from "@/lib/services/pinterest-boards";
+import { getBoardForArticle } from "@/lib/services/pinterest-boards";
 import { getNextPostingSlot } from "@/lib/pipeline/schedule";
 import { generatePinterestCopy } from "@/lib/services/pinterest-copy";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, gte } from "drizzle-orm";
 
 export async function publishAndPin(): Promise<{ processed: number }> {
   const BATCH_SIZE = 5;
@@ -23,7 +23,7 @@ export async function publishAndPin(): Promise<{ processed: number }> {
           sql`${articles.id} = (
             SELECT ${articles.id} FROM ${articles}
             WHERE ${articles.status} = ${ArticleStatus.PIN_READY}
-            ORDER BY ${articles.createdAt} ASC
+            ORDER BY ${articles.createdAt} DESC
             LIMIT 1
             FOR UPDATE SKIP LOCKED
           )`
@@ -79,55 +79,67 @@ export async function publishAndPin(): Promise<{ processed: number }> {
         console.error("[publish] Pinterest copy generation failed, using SEO defaults:", err);
       }
 
-      // Determine target Pinterest board(s)
+      // Determine target Pinterest board
       const primaryBoardId = await getBoardForArticle(article.title, recipeCategory);
 
-      // Queue the D7 pin for scheduled posting at an optimal time
-      const slot1 = await getNextPostingSlot();
-      const lastSlot = slot1;
+      // Daily pin budget: a fixed number of linked + no-link image pins per day,
+      // newest recipes first (this is the newest PIN_READY article). Once the
+      // day's budget is used, further recipes still publish for SEO but aren't
+      // pinned — so the queue stays lean and there's no backlog.
+      const maxLinked = parseInt(
+        await getConfigValue(ConfigKeys.MAX_LINKED_PINS_PER_DAY, "3"),
+        10,
+      );
+      const maxNolink = parseInt(
+        await getConfigValue(ConfigKeys.MAX_NOLINK_PINS_PER_DAY, "2"),
+        10,
+      );
+      const dayStart = new Date();
+      dayStart.setHours(0, 0, 0, 0);
 
-      if (article.pinImageUrl) {
+      const [{ count: linkedToday }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(pinQueue)
+        .where(
+          and(eq(pinQueue.pinType, PinType.ORIGINAL), gte(pinQueue.createdAt, dayStart)),
+        );
+      const [{ count: nolinkToday }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(pinQueue)
+        .where(
+          and(eq(pinQueue.pinType, PinType.NOLINK), gte(pinQueue.createdAt, dayStart)),
+        );
+
+      // Spend the linked budget first, then the no-link budget.
+      let pinType: string | null = null;
+      let pinLink = "";
+      if (linkedToday < maxLinked) {
+        pinType = PinType.ORIGINAL;
+        pinLink = canonicalUrl;
+      } else if (nolinkToday < maxNolink) {
+        pinType = PinType.NOLINK;
+        pinLink = ""; // no destination — image-only pin
+      }
+
+      if (pinType && article.pinImageUrl) {
+        const slot1 = await getNextPostingSlot();
         await db.insert(pinQueue).values({
           articleId: article.id,
           imageUrl: article.pinImageUrl,
           pinDesign: 7,
           title: pinTitle,
           description: pinDescription,
-          link: canonicalUrl,
+          link: pinLink,
           boardId: primaryBoardId,
           altText,
-          pinType: "original",
+          pinType,
           scheduledAt: slot1,
         });
-      }
-
-      // Multi-board distribution
-      const multiBoardEnabled = (await getConfigValue(ConfigKeys.MULTI_BOARD_ENABLED, "true")) === "true";
-      if (multiBoardEnabled) {
-        const allBoards = await getBoardsForArticle(article.title, recipeCategory, 3);
-        const secondaryBoards = allBoards.filter((id) => id !== primaryBoardId);
-
-        for (let j = 0; j < secondaryBoards.length; j++) {
-          const daysAfter = j + 2; // 2 days for first secondary, 3 for second
-          const afterDate = new Date(lastSlot.getTime() + daysAfter * 24 * 60 * 60 * 1000);
-          const secondarySlot = await getNextPostingSlot({ afterSlot: afterDate });
-
-          // Queue the D7 pin to secondary board
-          if (article.pinImageUrl) {
-            await db.insert(pinQueue).values({
-              articleId: article.id,
-              imageUrl: article.pinImageUrl,
-              pinDesign: 7,
-              title: pinTitle,
-              description: pinDescription,
-              link: canonicalUrl,
-              boardId: secondaryBoards[j],
-              altText,
-              pinType: "multiboard",
-              scheduledAt: secondarySlot,
-            });
-          }
-        }
+        console.log(`[publish] Queued ${pinType} pin for "${article.slug}"`);
+      } else {
+        console.log(
+          `[publish] Daily pin budget reached — published "${article.slug}" without a pin`,
+        );
       }
 
       await db
