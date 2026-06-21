@@ -38,6 +38,7 @@ export const articles = pgTable("articles", {
   retryCount: integer("retry_count").default(0).notNull(),
   failureReason: text("failure_reason"),
   heroImageUrl: text("hero_image_url"),
+  heroImageUrl2: text("hero_image_url_2"), // 2nd recipe photo (different angle) for the stacked pin
   midjourneyTaskId: text("midjourney_task_id"),
   midjourneyPrompt: text("midjourney_prompt"),
   pinImageUrl: text("pin_image_url"),

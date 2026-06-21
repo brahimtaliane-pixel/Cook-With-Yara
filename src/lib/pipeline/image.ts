@@ -43,10 +43,32 @@ export async function submitImage(): Promise<{ processed: number }> {
       { access: "public", contentType: image.mimeType, allowOverwrite: true }
     );
 
+    // Second recipe photo (different angle) for the stacked pin's bottom slot.
+    // Best-effort: if it fails, the pin falls back to two crops of the hero.
+    let heroImageUrl2: string | null = null;
+    try {
+      const second = await generateHeroImage(
+        `${article.midjourneyPrompt} — alternate close-up shot of the same dish from a different angle, same styling and lighting`
+      );
+      const ext2 = second.mimeType === "image/jpeg" ? "jpg" : "png";
+      const { url: url2 } = await put(
+        `recipes/${article.slug}/hero-2.${ext2}`,
+        second.data,
+        { access: "public", contentType: second.mimeType, allowOverwrite: true }
+      );
+      heroImageUrl2 = url2;
+    } catch (err) {
+      console.warn(
+        `[submit-image] Second image failed for ${article.slug} (pin will use hero crops):`,
+        err instanceof Error ? err.message : err
+      );
+    }
+
     await db
       .update(articles)
       .set({
         heroImageUrl: url,
+        heroImageUrl2,
         status: ArticleStatus.IMAGE_READY,
         updatedAt: new Date(),
       })

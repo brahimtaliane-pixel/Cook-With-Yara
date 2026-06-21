@@ -6,6 +6,8 @@ import sharp from "sharp";
 export interface PinImageParams {
   title: string;
   heroImageUrl: string;
+  /** Optional 2nd recipe photo (different angle) for the stacked pin's bottom slot. */
+  heroImageUrl2?: string;
   articleNumber?: number;
   topIngredients?: string[];
   servings?: string;
@@ -168,12 +170,15 @@ function photoStrip(
   );
 }
 
-// White title band with chunky uppercase title.
+// Title band. Default: chunky uppercase (Bowlby One). serif: elegant Playfair
+// Display in mixed case (editorial look).
 function titleBand(
   title: string,
   height: number,
-  opts: { bg?: string; color?: string } = {},
+  opts: { bg?: string; color?: string; serif?: boolean; maxTitle?: number } = {},
 ): El {
+  const serif = opts.serif === true;
+  const content = serif ? cleanHeadline(title) : title.toUpperCase();
   return div(
     {
       width: `${W}px`,
@@ -182,17 +187,38 @@ function titleBand(
       display: "flex",
       justifyContent: "center",
       alignItems: "center",
-      padding: "20px 50px",
+      padding: "20px 60px",
     },
-    text(title.toUpperCase(), {
-      fontFamily: "Bowlby One",
-      fontSize: `${titleSize(title)}px`,
+    text(content, {
+      fontFamily: serif ? "Playfair Display" : "Bowlby One",
+      fontSize: `${serif ? serifTitleSize(content, opts.maxTitle ?? 82) : titleSize(title)}px`,
+      ...(serif ? { fontWeight: 700 } : {}),
       color: opts.color ?? COLORS.titleText,
-      lineHeight: 1.0,
+      lineHeight: serif ? 1.08 : 1.0,
       textAlign: "center",
-      letterSpacing: "-1px",
+      letterSpacing: serif ? "0px" : "-1px",
     }),
   );
+}
+
+// Anton is a tall condensed display face — fits far more per line than Bowlby.
+function antonTitleSize(title: string, max = 76, min = 42): number {
+  const longestWord = title
+    .split(/\s+/)
+    .reduce((a, b) => (a.length > b.length ? a : b), "");
+  const wordLen = Math.max(longestWord.length, 1);
+  const TEXT_AREA = 880; // 1000 − 60px padding each side
+  const CHAR_RATIO = 0.42; // condensed glyphs
+  const maxByWord = Math.floor(TEXT_AREA / wordLen / CHAR_RATIO);
+
+  const len = title.length;
+  let byLength: number;
+  if (len > 55) byLength = min;
+  else if (len > 38) byLength = Math.round(min + (max - min) * 0.55);
+  else if (len > 24) byLength = Math.round(min + (max - min) * 0.82);
+  else byLength = max;
+
+  return Math.min(byLength, maxByWord);
 }
 
 // Dark URL bar.
@@ -216,28 +242,115 @@ function urlBar(height = 80, bg = COLORS.urlBg, color = COLORS.urlText): El {
   );
 }
 
-// === D1 — Reference layout: photo / title-band / photo / url-bar ===
+// === D1 — Stacked: photo / serif title-band / photo / url-bar ===
+// Top and bottom show two DIFFERENT recipe photos when heroImageUrl2 is set
+// (falls back to two crops of the one photo otherwise).
 
-function StackedPin({ title, heroImageUrl }: PinImageParams): El {
-  const URL_H = 80;
-  const TITLE_H = 380;
-  const PHOTO_AREA = H - URL_H - TITLE_H;
-  const TOP_H = Math.round(PHOTO_AREA * 0.6);
-  const BOT_H = PHOTO_AREA - TOP_H;
+function StackedPin({
+  title,
+  heroImageUrl,
+  heroImageUrl2,
+  eyebrow,
+  subtitle,
+}: PinImageParams): El {
+  const URL_H = 78;
+  // Two equal photos fill the canvas; the title card floats over their seam.
+  const PHOTO_H = Math.round((H - URL_H) / 2);
+
+  const hasSecond = Boolean(heroImageUrl2);
+  const bottomSrc = heroImageUrl2 || heroImageUrl;
+
+  const headline = cleanHeadline(title).toUpperCase();
+  const eb = (eyebrow ?? "RECIPE").toUpperCase();
+  const sub = subtitle ?? "";
+
+  // Floating card geometry — centered on the seam between the two photos.
+  const CARD_W = 884;
+  const CARD_H = 340;
+  const CARD_LEFT = Math.round((W - CARD_W) / 2);
+  const CARD_TOP = PHOTO_H - Math.round(CARD_H / 2);
+
+  const cardChildren: El[] = [
+    text(eb, {
+      fontFamily: "Inter",
+      fontSize: "20px",
+      fontWeight: 700,
+      color: COLORS.gold,
+      letterSpacing: "8px",
+      marginBottom: "16px",
+    }),
+    text(headline, {
+      fontFamily: "Anton",
+      fontSize: `${antonTitleSize(headline, 70)}px`,
+      color: COLORS.titleText,
+      lineHeight: 1.02,
+      textAlign: "center",
+      letterSpacing: "0.5px",
+    }),
+  ];
+  if (sub) {
+    cardChildren.push(
+      div({
+        width: "64px",
+        height: "2px",
+        backgroundColor: COLORS.gold,
+        display: "flex",
+        marginTop: "18px",
+        marginBottom: "14px",
+      }),
+      text(sub, {
+        fontFamily: "Inter",
+        fontSize: "22px",
+        fontWeight: 700,
+        color: "#9A7B61",
+        letterSpacing: "2px",
+        textAlign: "center",
+      }),
+    );
+  }
 
   return div(
     {
       width: `${W}px`,
       height: `${H}px`,
       display: "flex",
-      flexDirection: "column",
+      position: "relative",
       backgroundColor: COLORS.white,
     },
     [
-      photoStrip(heroImageUrl, TOP_H, "top"),
-      titleBand(title, TITLE_H),
-      photoStrip(heroImageUrl, BOT_H, "bottom"),
-      urlBar(URL_H),
+      // Photo stack + URL bar
+      div(
+        {
+          width: `${W}px`,
+          height: `${H}px`,
+          display: "flex",
+          flexDirection: "column",
+        },
+        [
+          photoStrip(heroImageUrl, PHOTO_H, "center"),
+          photoStrip(bottomSrc, PHOTO_H, hasSecond ? "center" : "bottom"),
+          urlBar(URL_H),
+        ],
+      ),
+      // Floating title card overlapping both photos
+      div(
+        {
+          position: "absolute",
+          top: `${CARD_TOP}px`,
+          left: `${CARD_LEFT}px`,
+          width: `${CARD_W}px`,
+          height: `${CARD_H}px`,
+          backgroundColor: COLORS.white,
+          borderRadius: "30px",
+          boxShadow: "0 24px 60px rgba(40,24,16,0.32)",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          alignItems: "center",
+          padding: "30px 60px",
+        },
+        cardChildren,
+      ),
     ],
   );
 }

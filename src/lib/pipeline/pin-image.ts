@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { articles } from "@/lib/db/schema";
 import { ArticleStatus } from "@/lib/constants";
-import { generatePinImageFullBleed } from "@/lib/services/canva";
+import { generatePinImage } from "@/lib/services/canva";
 import { shouldRetry } from "@/lib/pipeline/base";
 import { extractRecipeMeta } from "@/lib/utils/recipe-meta";
 import { put } from "@vercel/blob";
@@ -43,6 +43,7 @@ export async function createPinImage(): Promise<{ processed: number }> {
       const pinParams = {
         title: article.title || "Delicious Recipe",
         heroImageUrl: article.heroImageUrl,
+        heroImageUrl2: article.heroImageUrl2 ?? undefined,
         articleNumber: article.articleNumber,
         topIngredients: meta.topIngredients,
         servings: meta.servings,
@@ -51,8 +52,8 @@ export async function createPinImage(): Promise<{ processed: number }> {
         subtitle: meta.subtitle,
       };
 
-      // Single design: D7 full-bleed hero (the main design for all pins)
-      const pngBuffer = await generatePinImageFullBleed(pinParams);
+      // D1 stacked: top photo / serif title / bottom photo / URL bar
+      const pngBuffer = await generatePinImage(pinParams);
 
       const blob = await put(`recipes/${article.slug}/pin.png`, pngBuffer, {
         access: "public",
