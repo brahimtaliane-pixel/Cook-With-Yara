@@ -264,10 +264,10 @@ function StackedPin({
   const eb = (eyebrow ?? "RECIPE").toUpperCase();
   const sub = subtitle ?? "";
 
-  // Floating card geometry — centered on the seam between the two photos.
-  const CARD_W = 884;
-  const CARD_H = 340;
-  const CARD_LEFT = Math.round((W - CARD_W) / 2);
+  // Full-width title band overlapping the seam between the two photos.
+  const CARD_W = W;
+  const CARD_H = 270;
+  const CARD_LEFT = 0;
   const CARD_TOP = PHOTO_H - Math.round(CARD_H / 2);
 
   const cardChildren: El[] = [
@@ -341,13 +341,12 @@ function StackedPin({
           width: `${CARD_W}px`,
           height: `${CARD_H}px`,
           backgroundColor: COLORS.white,
-          borderRadius: "30px",
-          boxShadow: "0 24px 60px rgba(40,24,16,0.32)",
+          boxShadow: "0 0 46px rgba(40,24,16,0.30)",
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
           alignItems: "center",
-          padding: "30px 60px",
+          padding: "24px 80px",
         },
         cardChildren,
       ),
